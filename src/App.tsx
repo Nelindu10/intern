@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Header } from './components/Header';
+import { Login, UserSession } from './components/Login';
 import { SimulationWorkspace } from './components/SimulationWorkspace';
 import { AdminDashboard } from './components/AdminDashboard';
 import { EnginePlayground } from './components/EnginePlayground';
@@ -13,10 +14,27 @@ import { PricingModal } from './components/PricingModal';
 import { TaskDeliverable, EvaluateSubmissionResponse, CompletedSimulation, CompanyPreset } from './types';
 import { COMPANY_PRESETS, INITIAL_NIBM_COHORT, INITIAL_DEFAULT_TASK } from './data/presets';
 
-const STORAGE_KEY = 'SIMULATEHUB_NIBM_COHORT_V2';
+const STORAGE_COHORT_KEY = 'SIMULATEHUB_NIBM_COHORT_V2';
+const STORAGE_SESSION_KEY = 'SIMULATEHUB_NIBM_USER_SESSION';
 
 export default function App() {
+  // 1. Authentication & RBAC Session State
+  const [currentUser, setCurrentUser] = useState<UserSession | null>(() => {
+    try {
+      const savedSession = localStorage.getItem(STORAGE_SESSION_KEY);
+      if (savedSession) {
+        return JSON.parse(savedSession);
+      }
+    } catch (e) {
+      console.warn('Failed to parse user session');
+    }
+    return null;
+  });
+
+  // Active navigation tab conditioned by role
   const [activeTab, setActiveTab] = useState<'simulation' | 'dashboard' | 'playground'>('simulation');
+
+  // Selected company and current task
   const [selectedCompany, setSelectedCompany] = useState<CompanyPreset>(COMPANY_PRESETS[0]);
   const [currentTask, setCurrentTask] = useState<TaskDeliverable>(INITIAL_DEFAULT_TASK);
 
@@ -29,10 +47,10 @@ export default function App() {
   const [currentEvaluation, setCurrentEvaluation] = useState<EvaluateSubmissionResponse | null>(null);
   const [lastTimeTakenMins, setLastTimeTakenMins] = useState<number>(75);
 
-  // Cohort records
+  // Cohort records (Admin & Student historical submissions)
   const [cohortRecords, setCohortRecords] = useState<CompletedSimulation[]>(() => {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const saved = localStorage.getItem(STORAGE_COHORT_KEY);
       if (saved) {
         return JSON.parse(saved);
       }
@@ -42,21 +60,53 @@ export default function App() {
     return INITIAL_NIBM_COHORT;
   });
 
+  // Sync cohort records to localStorage
   useEffect(() => {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(cohortRecords));
+      localStorage.setItem(STORAGE_COHORT_KEY, JSON.stringify(cohortRecords));
     } catch (e) {
       console.warn('Failed to persist cohort records');
     }
   }, [cohortRecords]);
 
-  // When task is updated (via generate_task or search_and_generate)
+  // Sync user session to localStorage
+  useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem(STORAGE_SESSION_KEY, JSON.stringify(currentUser));
+      // Set appropriate initial view based on role
+      if (currentUser.role === 'admin') {
+        setActiveTab('dashboard');
+      } else {
+        setActiveTab('simulation');
+      }
+    } else {
+      localStorage.removeItem(STORAGE_SESSION_KEY);
+    }
+  }, [currentUser]);
+
+  // Login handler
+  const handleLogin = (session: UserSession) => {
+    setCurrentUser(session);
+    if (session.role === 'admin') {
+      setActiveTab('dashboard');
+    } else {
+      setActiveTab('simulation');
+    }
+  };
+
+  // Logout handler
+  const handleLogout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem(STORAGE_SESSION_KEY);
+  };
+
+  // Task updated (via generate_task or search_and_generate)
   const handleTaskUpdated = (task: TaskDeliverable, company: CompanyPreset) => {
     setCurrentTask(task);
     setSelectedCompany(company);
   };
 
-  // When evaluation completes (via evaluate_submission)
+  // Evaluation completed (via evaluate_submission)
   const handleEvaluationCompleted = (
     evaluation: EvaluateSubmissionResponse,
     timeTakenMins: number,
@@ -68,7 +118,7 @@ export default function App() {
 
     const newRecord: CompletedSimulation = {
       id: `SIM-NIBM-${Date.now().toString().slice(-4)}`,
-      studentName: 'Kasun Wickramasinghe',
+      studentName: currentUser?.name || 'Kasun Wickramasinghe',
       studentId: 'NIBM-BSE-22.1-018',
       companyName: selectedCompany.name,
       techStack: ('required_technology' in currentTask ? currentTask.required_technology : currentTask.detected_tech_stack) || selectedCompany.techStack,
@@ -92,20 +142,31 @@ export default function App() {
     setUnlockedPlan(`Unlocked: ${code} Institutional Premium`);
   };
 
+  // -------------------------------------------------------------
+  // RULE 6: If user is not logged in, STRICTLY ONLY show Login
+  // -------------------------------------------------------------
+  if (!currentUser) {
+    return <Login onLogin={handleLogin} />;
+  }
+
   return (
     <div className="min-h-screen bg-[#faf8ff] text-[#131b2e] flex flex-col font-sans selection:bg-[#ede9fe] selection:text-[#493ee5]">
-      {/* Header with SimulateHub branding */}
+      {/* Header with Role-Based Navigation & Logout */}
       <Header
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         activeCompany={selectedCompany.name}
         onOpenPricing={() => setIsPricingOpen(true)}
         unlockedPlan={unlockedPlan}
+        role={currentUser.role}
+        userEmail={currentUser.email}
+        onLogout={handleLogout}
       />
 
-      {/* Main View Container */}
+      {/* Main View Container with Strict RBAC rules */}
       <main className="flex-1 pb-14">
-        {activeTab === 'simulation' && (
+        {/* STUDENT VIEW: ONLY Sandbox Workspace, Countdown timer, and Task Simulator. NEVER HR Dashboard */}
+        {currentUser.role === 'student' && (
           <SimulationWorkspace
             currentTask={currentTask}
             onTaskUpdated={handleTaskUpdated}
@@ -116,18 +177,23 @@ export default function App() {
           />
         )}
 
-        {activeTab === 'dashboard' && (
-          <AdminDashboard
-            cohortRecords={cohortRecords}
-            onSelectRecord={handleSelectRecord}
-            onLaunchNewSimulation={() => setActiveTab('simulation')}
-          />
-        )}
+        {/* ADMIN VIEW: ONLY NIBM HR Dashboard and AI Engine API Sandbox */}
+        {currentUser.role === 'admin' && (
+          <>
+            {activeTab === 'dashboard' && (
+              <AdminDashboard
+                cohortRecords={cohortRecords}
+                onSelectRecord={handleSelectRecord}
+                onLaunchNewSimulation={() => {}}
+              />
+            )}
 
-        {activeTab === 'playground' && <EnginePlayground />}
+            {activeTab === 'playground' && <EnginePlayground />}
+          </>
+        )}
       </main>
 
-      {/* Pricing / Institutional Access Modal (screen_56a05b79.png) */}
+      {/* Pricing Modal */}
       <PricingModal
         isOpen={isPricingOpen}
         onClose={() => setIsPricingOpen(false)}
@@ -143,29 +209,38 @@ export default function App() {
           task={currentTask}
           companyName={selectedCompany.name}
           timeTakenMins={lastTimeTakenMins}
-          studentName="Kasun Wickramasinghe (NIBM-BSE-22.1-018)"
-          onRetakeTask={() => setActiveTab('simulation')}
+          studentName={currentUser.role === 'student' ? currentUser.name : 'Kasun Wickramasinghe (NIBM-BSE-22.1-018)'}
+          onRetakeTask={() => {
+            if (currentUser.role === 'student') setActiveTab('simulation');
+          }}
         />
       )}
 
-      {/* Footer matching screen_56a05b79.png & screen_f251a6c4.png */}
+      {/* Institutional Footer */}
       <footer className="border-t border-slate-200/80 bg-white py-4 text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="font-semibold text-slate-700">SimulateHub Secure Enterprise Simulation Gateway</span>
             <span>•</span>
             <span className="font-mono text-[11px] text-slate-400">Environment v2.4</span>
+            <span>•</span>
+            <span className="font-bold text-[#493ee5]">
+              Session: {currentUser.role.toUpperCase()} ({currentUser.email})
+            </span>
           </div>
 
           <div className="flex items-center gap-4 text-[11px] text-slate-500">
             <span className="flex items-center gap-1.5 text-emerald-700 font-medium">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-              Session Active · Runtime: Python 3.11 / React 19
+              Session Authenticated · RBAC Active
             </span>
             <span className="text-slate-300">|</span>
-            <span className="hover:text-slate-900 cursor-pointer">Privacy Policy</span>
-            <span className="hover:text-slate-900 cursor-pointer">Terms of Service</span>
-            <span className="hover:text-slate-900 cursor-pointer">Support</span>
+            <button
+              onClick={handleLogout}
+              className="text-red-600 hover:underline font-semibold cursor-pointer"
+            >
+              Sign Out
+            </button>
           </div>
         </div>
       </footer>
