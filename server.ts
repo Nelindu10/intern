@@ -453,24 +453,42 @@ async function handleEvaluateSubmission(req: EvaluateSubmissionActionRequest): P
 
   if (ai) {
     try {
-      const systemPrompt = `You are the core AI Engine for the "AI-Driven Virtual Internship & Industry Simulation Platform". You act as a Virtual Technical Manager, Business Analysis Lead, and Institutional HR Evaluator for undergraduates.
-Evaluate the student's completed task. This can be raw code OR content extracted from an uploaded PDF report/assignment.
-If submission_type is 'code', evaluate syntax and logic. If 'pdf_document', evaluate analytical thinking, business logic, problem-solving, and professional formatting.
-Respond with scores from 0 to 100 for overall_score, technical_or_analytical_score, and cultural_fit_and_communication_score.
-Provide detailed_feedback on what was done right and what needs improvement.
-Provide a 2-sentence hr_dashboard_summary for the NIBM Admin/HR Dashboard indicating industry readiness.
-You must ALWAYS respond in strict JSON format. Do not include markdown formatting tags like \`\`\`json or any conversational text outside the JSON object.`;
+      const isPdf = subType === 'pdf_document';
+      const systemPrompt = `You are the core AI Engine for the "AI-Driven Virtual Internship & Industry Simulation Platform". You act as a Virtual Technical Manager, Business Analysis Lead, and Institutional HR Evaluator for IT undergraduates.
+
+EVALUATION PROTOCOL:
+The submission_type is "${subType}".
+
+${isPdf ? `CRITICAL EVALUATION CRITERIA FOR UPLOADED PDF REPORT:
+Instead of checking code syntax, evaluate the uploaded PDF report based strictly on:
+1. Analytical thinking and problem-solving approach.
+2. Business logic and technical requirement coverage.
+3. Professional formatting, structure, and clarity of the report.
+Review the PDF content thoroughly and provide specific, actionable feedback.` : `CRITICAL EVALUATION CRITERIA FOR CODE SUBMISSION:
+Evaluate code syntax, modular architecture, distributed locking/idempotency, and error handling.`}
+
+JSON OUTPUT SPECIFICATION:
+You must ALWAYS respond in strict JSON format. Do not include markdown formatting tags like \`\`\`json or any conversational text outside the JSON object.
+Return JSON with this exact schema:
+{
+  "action_type": "evaluate_submission_response",
+  "overall_score": 88,
+  "technical_or_analytical_score": 90,
+  "cultural_fit_and_communication_score": 85,
+  "detailed_feedback": "What was done right:\n• ...\n\nWhat needs improvement:\n• ...",
+  "hr_dashboard_summary": "Two-sentence summary for the NIBM Admin/HR Dashboard indicating student industry readiness."
+}`;
 
       const userPrompt = `action: evaluate_submission
 task_title: ${req.task_title}
 submission_type: ${subType}
-time_taken_mins: ${req.time_taken_mins}
+time_taken_mins: ${req.time_taken_mins || 30}
 student_submission:
 """
 ${req.student_submission}
 """
 
-Evaluate this submission now.`;
+Evaluate this ${isPdf ? 'PDF assignment report' : 'code submission'} based strictly on the required criteria now.`;
 
       const response = await ai.models.generateContent({
         model: 'gemini-3.8-flash',

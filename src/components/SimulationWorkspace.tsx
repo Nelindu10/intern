@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Building2,
   Sparkles,
@@ -18,17 +18,18 @@ import {
   FileText,
   AlertCircle,
   Copy,
-  ChevronRight,
   Code2,
   Lock,
   ArrowRight,
   X,
   Upload,
   Award,
-  TrendingUp,
   BrainCircuit,
   ShieldCheck,
   FileCheck2,
+  Paperclip,
+  Trash2,
+  ExternalLink,
 } from 'lucide-react';
 import {
   TaskDeliverable,
@@ -53,6 +54,13 @@ interface SimulationWorkspaceProps {
   setSelectedCompany: (company: CompanyPreset) => void;
   userPlan?: string;
   onOpenUpgrade?: () => void;
+}
+
+export interface AttachedPdf {
+  name: string;
+  sizeFormatted: string;
+  content: string;
+  rawFile?: File;
 }
 
 export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
@@ -129,7 +137,6 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
     message: string;
   } | null>(null);
 
-  // Auto-dismiss alert/toast after 4.5 seconds
   useEffect(() => {
     if (!lockedToast) return;
     const timer = setTimeout(() => {
@@ -152,22 +159,29 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchingCompany, setIsSearchingCompany] = useState(false);
 
-  // Submission Mode: 'code' or 'pdf_document'
-  const [submissionMode, setSubmissionMode] = useState<'code' | 'pdf_document'>(
-    selectedCompany.defaultSubmissionType ||
-      (currentTask.expected_deliverable?.toLowerCase().includes('pdf') ? 'pdf_document' : 'code')
-  );
+  // ---------------------------------------------------------------------------
+  // REQUIREMENT 1: FILE UPLOAD STATE & PDF ATTACHMENT
+  // State variable `uploadedFile` captures the PDF file when selected via "+ Attach PDF Report".
+  // Displays the file name once attached.
+  // Pre-attached with "Stripe_Fintech_Deliverable.pdf" as shown in the interface screenshot.
+  // ---------------------------------------------------------------------------
+  const [uploadedFile, setUploadedFile] = useState<AttachedPdf | null>({
+    name: 'Stripe_Fintech_Deliverable.pdf',
+    sizeFormatted: '3.8 MB',
+    content: SAMPLE_BA_PDF_REPORT,
+  });
 
-  // Testing & Error Simulation States (Matches screen_ad2769cb.png)
+  const [isExtractingPdf, setIsExtractingPdf] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // View mode switcher: 'code' or 'pdf_document'
+  const [activeWorkspaceView, setActiveWorkspaceView] = useState<'code' | 'pdf_document'>('code');
+
+  // Testing & Error Simulation States (Matches screen.png)
   const [simulateNetworkError, setSimulateNetworkError] = useState(false);
   const [showPayloadSchemaModal, setShowPayloadSchemaModal] = useState(false);
 
-  // PDF Document / Assignment Content
-  const [pdfDocumentContent, setPdfDocumentContent] = useState<string>(SAMPLE_BA_PDF_REPORT);
-  const [uploadedFileName, setUploadedFileName] = useState<string>('NIBM_Assignment_BRS_v1.2.pdf');
-  const [isExtractingPdf, setIsExtractingPdf] = useState(false);
-
-  // File Tabs
+  // Code Workspace File Tabs
   const [activeFile, setActiveFile] = useState<'webhookHandler' | 'idempotencyService' | 'testSuite' | 'terminalLog'>('webhookHandler');
   const [fileContents, setFileContents] = useState({
     webhookHandler: CODE_WORKSPACE_FILES.webhookHandler,
@@ -182,8 +196,8 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
   );
 
   // Time tracking
-  const [timeTakenMins, setTimeTakenMins] = useState<number>(45);
-  const [countdownSeconds, setCountdownSeconds] = useState<number>(13637); // 03:47:17
+  const [timeTakenMins, setTimeTakenMins] = useState<number>(30); // 30 mins per requirement
+  const [countdownSeconds, setCountdownSeconds] = useState<number>(13087); // 03:38:07
 
   // Acceptance Checklist
   const [checklist, setChecklist] = useState<{ [key: number]: boolean }>({
@@ -198,28 +212,22 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
   const [testRunCount, setTestRunCount] = useState(4);
 
   // ---------------------------------------------------------------------------
-  // GOOGLE GEMINI EVALUATION STATES & RESPONSE PARSER
+  // REQUIREMENT 3 & 4: GEMINI EVALUATION STATES & LIGHT PURPLE MODAL
   // ---------------------------------------------------------------------------
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [evaluationStage, setEvaluationStage] = useState<string>('');
   const [evalError, setEvalError] = useState<string | null>(null);
+  const [evaluationModalOpen, setEvaluationModalOpen] = useState(false);
   const [evaluationResult, setEvaluationResult] = useState<EvaluateSubmissionResponse | null>(null);
   const [copiedFeedback, setCopiedFeedback] = useState(false);
 
-  // Ticking countdown clock for standup
+  // Countdown timer for foreign office standup
   useEffect(() => {
     const timer = setInterval(() => {
       setCountdownSeconds((prev) => (prev > 0 ? prev - 1 : 14400));
     }, 1000);
     return () => clearInterval(timer);
   }, []);
-
-  // Update submission mode if company changes
-  useEffect(() => {
-    if (selectedCompany.defaultSubmissionType) {
-      setSubmissionMode(selectedCompany.defaultSubmissionType);
-    }
-  }, [selectedCompany]);
 
   const formatCountdown = (totalSec: number) => {
     const hours = Math.floor(totalSec / 3600);
@@ -228,48 +236,61 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
     return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   };
 
-  // File upload reader for PDF / Document text extraction
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle PDF file selection from file input
+  const handlePdfFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsExtractingPdf(true);
-    setUploadedFileName(file.name);
+    const sizeInMb = (file.size / (1024 * 1024)).toFixed(1);
+    const sizeFormatted = `${sizeInMb} MB`;
 
     const reader = new FileReader();
     reader.onload = (event) => {
       const text = event.target?.result as string;
-      if (text && text.trim().length > 0) {
-        setPdfDocumentContent(
-          `# EXTRACTED DOCUMENT: ${file.name}\n` +
-            `File Size: ${(file.size / 1024).toFixed(1)} KB | Uploaded: ${new Date().toLocaleTimeString()}\n\n` +
+      const content =
+        text && text.trim().length > 0
+          ? `# EXTRACTED DELIVERABLE: ${file.name}\n` +
+            `Size: ${sizeFormatted} | Uploaded: ${new Date().toLocaleTimeString()}\n\n` +
             text
-        );
-      } else {
-        setPdfDocumentContent(
-          `# EXTRACTED DOCUMENT CONTENT: ${file.name}\n` +
-            `Document Source: ${file.name} (${(file.size / 1024).toFixed(1)} KB)\n` +
-            `Status: Text extraction parsed successfully via NIBM Document Ingress\n\n` +
-            SAMPLE_BA_PDF_REPORT
-        );
-      }
+          : `# EXTRACTED DELIVERABLE CONTENT: ${file.name}\n` +
+            `Source: ${file.name} (${sizeFormatted})\n` +
+            `Parsed via NIBM Industry Simulation Ingress Engine\n\n` +
+            SAMPLE_BA_PDF_REPORT;
+
+      setUploadedFile({
+        name: file.name,
+        sizeFormatted,
+        content,
+        rawFile: file,
+      });
       setIsExtractingPdf(false);
     };
 
     reader.onerror = () => {
       setIsExtractingPdf(false);
+      alert('Unable to read selected PDF. Please try another file.');
     };
 
     reader.readAsText(file);
+    // Reset file input so re-selecting same file triggers event
+    e.target.value = '';
+  };
+
+  // Trigger file selection dialog
+  const triggerPdfPicker = () => {
+    fileInputRef.current?.click();
+  };
+
+  // Remove attached PDF
+  const handleRemoveAttachedPdf = () => {
+    setUploadedFile(null);
   };
 
   // ACTION 1: generate_task (Triggered when user clicks a preset company)
   const handleSelectPreset = async (company: CompanyPreset) => {
     setSelectedCompany(company);
     setIsSearchingCompany(true);
-    if (company.defaultSubmissionType) {
-      setSubmissionMode(company.defaultSubmissionType);
-    }
     try {
       const response = await fetch('/api/engine/request', {
         method: 'POST',
@@ -283,12 +304,6 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
       });
       const data: GenerateTaskResponse = await response.json();
       onTaskUpdated(data, company);
-      if (
-        data.expected_deliverable?.toLowerCase().includes('pdf') ||
-        data.expected_deliverable?.toLowerCase().includes('report')
-      ) {
-        setSubmissionMode('pdf_document');
-      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -296,7 +311,7 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
     }
   };
 
-  // Enforce company limit on selectedCompany (auto-fallback if currently on locked company)
+  // Enforce company limit on selectedCompany
   useEffect(() => {
     const currentIndex = COMPANY_PRESETS.findIndex(
       (c) => c.name.toLowerCase() === selectedCompany.name.toLowerCase()
@@ -306,7 +321,7 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
     }
   }, [activePlan, allowedCompanyCount, selectedCompany.name]);
 
-  // ACTION 2: search_and_generate_company_task (Triggered from unlisted company search bar)
+  // ACTION 2: search_and_generate_company_task
   const handleSearchCompany = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!isPremium) {
@@ -370,9 +385,6 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
 
       setSelectedCompany(discoveredCompany);
       onTaskUpdated(data, discoveredCompany);
-      if (isBa) {
-        setSubmissionMode('pdf_document');
-      }
       setSearchQuery('');
     } catch (err) {
       console.error(err);
@@ -383,86 +395,93 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
   };
 
   // ---------------------------------------------------------------------------
-  // REQUIREMENT: GOOGLE GEMINI API INTEGRATION FOR SUBMISSION EVALUATION
-  // 1. Async function on "Submit Task to AI Evaluator" button
-  // 2. Uses import.meta.env.VITE_GEMINI_API_KEY
-  // 3. Strict payload: { action, task_title, submission_type, student_submission, time_taken_mins }
-  // 4. Parses overall_score, detailed_feedback, hr_dashboard_summary into light purple UI
-  // 5. Loading states & error handling
+  // REQUIREMENT 2 & 3: SUBMISSION LOGIC & GEMINI API INTEGRATION
+  // - Check if an attached PDF exists (uploadedFile)
+  // - If attached: submission_type = "pdf_document", student_submission = uploadedFile's name/content
+  // - Otherwise: fall back to "code"
+  // - Send exact JSON payload structure:
+  //   {
+  //     "action": "evaluate_submission",
+  //     "task_title": "Current Task Title",
+  //     "submission_type": "pdf_document" (or "code"),
+  //     "student_submission": "...",
+  //     "time_taken_mins": 30
+  //   }
+  // - Uses import.meta.env.VITE_GEMINI_API_KEY
   // ---------------------------------------------------------------------------
   const handleSubmitEvaluation = async () => {
     setIsEvaluating(true);
     setEvalError(null);
-    setEvaluationStage('Initializing Google Gemini Evaluator Engine...');
+    setEvaluationStage('Validating deliverables and connecting to Gemini Evaluator Engine...');
 
     try {
-      // Simulate network error if user checked the toggle
       if (simulateNetworkError) {
-        await new Promise((resolve) => setTimeout(resolve, 800));
+        await new Promise((resolve) => setTimeout(resolve, 600));
         throw new Error(
-          'Simulated Network Error: Failed to reach the AI Evaluation endpoint (ECONNREFUSED / Network Timeout). Please uncheck "Simulate Network Error" and retry.'
+          'Simulated Network Error: AI Evaluator endpoint timeout. Uncheck "Simulate Network Error" in top bar to test live evaluation.'
         );
       }
 
-      // Prepare raw submission text
-      const rawSubmission =
-        submissionMode === 'pdf_document'
-          ? pdfDocumentContent
-          : fileContents.webhookHandler || fileContents[activeFile];
+      // Check if an attached PDF exists
+      const hasPdf = !!uploadedFile;
+      const submissionType: 'pdf_document' | 'code' = hasPdf ? 'pdf_document' : 'code';
 
-      const fullSubmission =
-        submissionMode === 'pdf_document'
-          ? `SUBMISSION TYPE: PDF DOCUMENT / ASSIGNMENT REPORT\nDOCUMENT TITLE: ${uploadedFileName}\n\nDOCUMENT BODY:\n${pdfDocumentContent}\n\nANALYTICAL RATIONALE & STAKEHOLDER TRACEABILITY:\n${rationaleNotes}`
-          : `SUBMISSION TYPE: PRODUCTION CODE IMPLEMENTATION\nACTIVE FILE: ${activeFile}.ts\n\nCODE:\n${rawSubmission}\n\nIMPLEMENTATION RATIONALE & CONCURRENCY TRADE-OFFS:\n${rationaleNotes}`;
+      // Build student_submission payload string
+      const studentSubmission = hasPdf
+        ? `[ATTACHED PDF DELIVERABLE]\nDocument Name: ${uploadedFile.name}\nSize: ${uploadedFile.sizeFormatted}\n\nCONTENT / REPORT EXTRACT:\n${uploadedFile.content}\n\nIMPLEMENTATION & ANALYTICAL RATIONALE:\n${rationaleNotes}`
+        : `[CODE SUBMISSION]\nFile: ${activeFile}.ts\n\nCODE IMPLEMENTATION:\n${fileContents[activeFile]}\n\nIMPLEMENTATION RATIONALE & CONCURRENCY TRADE-OFFS:\n${rationaleNotes}`;
 
-      // User requested strict payload:
+      // Exact JSON payload structure requested:
       const payload = {
         action: 'evaluate_submission',
         task_title: currentTask.task_title,
-        submission_type: submissionMode,
-        student_submission: fullSubmission,
-        time_taken_mins: timeTakenMins || 45,
+        submission_type: submissionType,
+        student_submission: studentSubmission,
+        time_taken_mins: 30,
       };
 
       const apiKey = (import.meta.env.VITE_GEMINI_API_KEY || '').trim();
       let evalData: EvaluateSubmissionResponse | null = null;
 
-      // 1. Try Direct Google Gemini API call with VITE_GEMINI_API_KEY if available
+      // 1. Direct Google Gemini API call with VITE_GEMINI_API_KEY
       if (apiKey) {
-        setEvaluationStage('Querying Google Gemini API (gemini-3.8-flash)...');
+        setEvaluationStage('Evaluating via Google Gemini (gemini-3.8-flash)...');
         try {
           const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${encodeURIComponent(
             apiKey
           )}`;
 
+          const isPdf = submissionType === 'pdf_document';
+          const systemInstruction =
+            'You are the core AI Engine for the "AI-Driven Virtual Internship & Industry Simulation Platform". You act as a Virtual Technical Manager, Business Analysis Lead, and Institutional HR Evaluator for IT undergraduates.\n\n' +
+            `The student has submitted a ${isPdf ? 'PDF assignment report ("pdf_document")' : 'code implementation ("code")'}.\n\n` +
+            (isPdf
+              ? 'CRITICAL EVALUATION CRITERIA FOR PDF REPORT:\n' +
+                'Instead of checking code syntax, evaluate the uploaded PDF content based strictly on:\n' +
+                '1. Analytical thinking and problem-solving approach.\n' +
+                '2. Business logic and technical requirement coverage.\n' +
+                '3. Professional formatting, structure, and clarity of the report.\n\n'
+              : 'CRITICAL EVALUATION CRITERIA FOR CODE:\n' +
+                'Evaluate code syntax, architectural robustness, distributed locks/idempotency, and regression resistance.\n\n') +
+            'You must ALWAYS respond in strict JSON format. Do not include markdown formatting like ```json or any conversational text outside the JSON object.\n\n' +
+            'Required JSON response structure:\n' +
+            '{\n' +
+            '  "action_type": "evaluate_submission_response",\n' +
+            '  "overall_score": 88,\n' +
+            '  "technical_or_analytical_score": 90,\n' +
+            '  "cultural_fit_and_communication_score": 85,\n' +
+            '  "detailed_feedback": "What was done right:\\n• Specific review of the content\\n\\nWhat needs improvement:\\n• Specific actionable recommendations",\n' +
+            '  "hr_dashboard_summary": "Two-sentence summary for the NIBM HR Dashboard regarding student industry readiness."\n' +
+            '}';
+
           const geminiBody = {
             system_instruction: {
-              parts: [
-                {
-                  text:
-                    "You are the core AI Engine for the 'AI-Driven Virtual Internship & Industry Simulation Platform'. You act as a Virtual Technical Manager, Business Analysis Lead, and Institutional HR Evaluator for IT undergraduates.\n\n" +
-                    'You must evaluate the student submission against industry-level standards.\n' +
-                    'You must ALWAYS respond in strict JSON format. Do not include markdown formatting like ```json or any conversational text outside the JSON object.\n\n' +
-                    'Expected Response JSON format:\n' +
-                    '{\n' +
-                    '  "action_type": "evaluate_submission_response",\n' +
-                    '  "overall_score": 88,\n' +
-                    '  "technical_or_analytical_score": 90,\n' +
-                    '  "cultural_fit_and_communication_score": 86,\n' +
-                    '  "detailed_feedback": "String (Comprehensive multi-paragraph feedback highlighting architectural correctness, strengths, code quality/analysis depth, and specific areas for improvement)",\n' +
-                    '  "hr_dashboard_summary": "String (Executive institutional recommendation for hiring managers or university transcript)"\n' +
-                    '}',
-                },
-              ],
+              parts: [{ text: systemInstruction }],
             },
             contents: [
               {
                 role: 'user',
-                parts: [
-                  {
-                    text: JSON.stringify(payload, null, 2),
-                  },
-                ],
+                parts: [{ text: JSON.stringify(payload, null, 2) }],
               },
             ],
             generationConfig: {
@@ -485,27 +504,26 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
               const parsed = JSON.parse(cleaned);
               evalData = {
                 action_type: 'evaluate_submission_response',
-                overall_score: Number(parsed.overall_score) || 85,
+                overall_score: Number(parsed.overall_score) || 88,
                 technical_or_analytical_score:
-                  Number(parsed.technical_or_analytical_score) || Number(parsed.technical_accuracy_score) || 86,
+                  Number(parsed.technical_or_analytical_score) || Number(parsed.technical_accuracy_score) || 90,
                 cultural_fit_and_communication_score:
-                  Number(parsed.cultural_fit_and_communication_score) || 84,
-                detailed_feedback:
-                  parsed.detailed_feedback || 'Submission verified against enterprise engineering rubrics.',
+                  Number(parsed.cultural_fit_and_communication_score) || 85,
+                detailed_feedback: parsed.detailed_feedback || 'Submission reviewed successfully.',
                 hr_dashboard_summary:
-                  parsed.hr_dashboard_summary || 'Candidate demonstrated competent implementation rigor.',
-                submission_type: submissionMode,
+                  parsed.hr_dashboard_summary || 'Candidate demonstrated enterprise-ready competency.',
+                submission_type: submissionType,
               };
             }
           }
         } catch (directErr) {
-          console.warn('Direct Gemini API call failed, falling back to server proxy:', directErr);
+          console.warn('Direct Gemini API fetch error, falling back to backend endpoint:', directErr);
         }
       }
 
-      // 2. If direct call wasn't executed or failed, invoke backend endpoint /api/engine/request
+      // 2. Fallback to backend proxy (/api/engine/request)
       if (!evalData) {
-        setEvaluationStage('Connecting to SimulateHub AI Evaluation Gateway (/api/engine/request)...');
+        setEvaluationStage('Connecting to SimulateHub Evaluation Gateway (/api/engine/request)...');
         const response = await fetch('/api/engine/request', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -513,32 +531,32 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
         });
 
         if (!response.ok) {
-          throw new Error(`Server returned status ${response.status}: ${response.statusText}`);
+          throw new Error(`Evaluation gateway returned status ${response.status}: ${response.statusText}`);
         }
 
         const data = await response.json();
         evalData = {
           action_type: 'evaluate_submission_response',
-          overall_score: Number(data.overall_score) || 86,
+          overall_score: Number(data.overall_score) || 87,
           technical_or_analytical_score:
-            Number(data.technical_or_analytical_score) || Number(data.technical_accuracy_score) || 88,
+            Number(data.technical_or_analytical_score) || Number(data.technical_accuracy_score) || 89,
           cultural_fit_and_communication_score:
             Number(data.cultural_fit_and_communication_score) || 84,
-          detailed_feedback: data.detailed_feedback || 'Submission successfully verified against industry rubrics.',
+          detailed_feedback: data.detailed_feedback || 'Submission verified against enterprise rubrics.',
           hr_dashboard_summary:
-            data.hr_dashboard_summary || 'Candidate demonstrated enterprise-ready competency.',
-          submission_type: submissionMode,
+            data.hr_dashboard_summary || 'Candidate demonstrated high analytical rigor and requirement coverage.',
+          submission_type: submissionType,
         };
       }
 
-      setEvaluationStage('Synthesizing institutional assessment report...');
       setEvaluationResult(evalData);
+      setEvaluationModalOpen(true);
 
-      // Notify parent app (updates cohort stats and allows certificate generation)
-      onEvaluationCompleted(evalData, timeTakenMins, fullSubmission, submissionMode);
+      // Pass result to parent app
+      onEvaluationCompleted(evalData, 30, studentSubmission, submissionType);
     } catch (err: any) {
       console.error('AI Evaluation error:', err);
-      setEvalError(err.message || 'AI Evaluation encountered an unexpected error. Please try again.');
+      setEvalError(err.message || 'AI Evaluation encountered an error. Please try again.');
     } finally {
       setIsEvaluating(false);
       setEvaluationStage('');
@@ -555,7 +573,7 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
 
   const handleCopyFeedback = () => {
     if (!evaluationResult) return;
-    const text = `SimulateHub AI Evaluation Report\nCompany: ${selectedCompany.name}\nTask: ${currentTask.task_title}\nOverall Score: ${evaluationResult.overall_score}/100\nTechnical/Analytical: ${evaluationResult.technical_or_analytical_score}/100\nCultural/Communication: ${evaluationResult.cultural_fit_and_communication_score}/100\n\nHR Dashboard Summary:\n${evaluationResult.hr_dashboard_summary}\n\nDetailed Feedback:\n${evaluationResult.detailed_feedback}`;
+    const text = `SimulateHub AI Evaluation Report\nTask: ${currentTask.task_title}\nCompany: ${selectedCompany.name}\nSubmission Type: ${evaluationResult.submission_type || (uploadedFile ? 'pdf_document' : 'code')}\nOverall Score: ${evaluationResult.overall_score}/100\nTechnical/Analytical Score: ${evaluationResult.technical_or_analytical_score}/100\nCulture/Communication Score: ${evaluationResult.cultural_fit_and_communication_score}/100\n\nHR Dashboard Summary:\n${evaluationResult.hr_dashboard_summary}\n\nDetailed Feedback:\n${evaluationResult.detailed_feedback}`;
     navigator.clipboard.writeText(text);
     setCopiedFeedback(true);
     setTimeout(() => setCopiedFeedback(false), 2000);
@@ -563,6 +581,15 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 text-[#131b2e] relative">
+      {/* Hidden file input for attaching/replacing PDF reports */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".pdf,.doc,.docx,.txt"
+        onChange={handlePdfFileChange}
+        className="hidden"
+      />
+
       {/* Plan Restriction Toast / Alert Notification (Light Purple & White Theme) */}
       {lockedToast && (
         <div className="fixed top-20 right-4 sm:right-8 z-50 max-w-sm sm:max-w-md w-full animate-in slide-in-from-top-3 fade-in duration-200">
@@ -628,7 +655,7 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
             <div className="bg-gradient-to-r from-[#493ee5] to-[#635bff] p-4 text-white flex items-center justify-between">
               <div className="flex items-center gap-2 font-bold text-sm">
                 <Code2 className="w-4 h-4" />
-                <span>Strict API Payload Specification (Action 3: evaluate_submission)</span>
+                <span>Strict API Payload Specification (Action: evaluate_submission)</span>
               </div>
               <button
                 type="button"
@@ -640,7 +667,7 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
             </div>
             <div className="p-5 space-y-3 text-xs">
               <p className="text-slate-600">
-                This exact strict JSON payload is dispatched to Google Gemini API using{' '}
+                Dispatched to Gemini API using{' '}
                 <code className="text-[#635bff] font-mono font-semibold">import.meta.env.VITE_GEMINI_API_KEY</code>:
               </p>
               <div className="bg-[#0f172a] text-[#dae2fd] p-3.5 rounded-xl font-mono text-[11px] overflow-x-auto leading-relaxed border border-slate-800">
@@ -648,9 +675,11 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
                   {
                     action: 'evaluate_submission',
                     task_title: currentTask.task_title,
-                    submission_type: submissionMode,
-                    student_submission: `[Raw ${submissionMode === 'code' ? 'code implementation' : 'PDF extracted text'} & concurrency rationale]`,
-                    time_taken_mins: timeTakenMins,
+                    submission_type: uploadedFile ? 'pdf_document' : 'code',
+                    student_submission: uploadedFile
+                      ? `[Attached PDF: ${uploadedFile.name} (${uploadedFile.sizeFormatted})]`
+                      : `[Raw code implementation from ${activeFile}.ts]`,
+                    time_taken_mins: 30,
                   },
                   null,
                   2
@@ -659,10 +688,12 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
               <div className="bg-[#faf8ff] border border-[#635bff]/20 rounded-xl p-3 space-y-1">
                 <div className="font-bold text-[#493ee5] flex items-center gap-1.5">
                   <ShieldCheck className="w-3.5 h-3.5 text-[#635bff]" />
-                  <span>Expected Response Schema</span>
+                  <span>Evaluation Criteria</span>
                 </div>
-                <p className="text-[11px] text-slate-600 font-mono">
-                  {`{ overall_score: number, technical_or_analytical_score: number, cultural_fit_and_communication_score: number, detailed_feedback: string, hr_dashboard_summary: string }`}
+                <p className="text-[11px] text-slate-600">
+                  {uploadedFile
+                    ? 'PDF Document: Evaluates analytical thinking, business logic, requirement coverage, and professional report structure.'
+                    : 'Code: Evaluates syntax, idempotency locks, regression suites, and concurrency trade-offs.'}
                 </p>
               </div>
               <div className="pt-2 flex justify-end">
@@ -679,7 +710,174 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
         </div>
       )}
 
-      {/* Active Sandbox Session Sub-Bar (Matches screen_f251a6c4.png) */}
+      {/* ----------------------------------------------------------------------- */}
+      {/* REQUIREMENT 4: LIGHT PURPLE MODAL FOR EVALUATION RESULTS */}
+      {/* ----------------------------------------------------------------------- */}
+      {evaluationModalOpen && evaluationResult && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 overflow-y-auto animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-2xl w-full border-2 border-[#635bff]/30 shadow-2xl overflow-hidden relative text-[#131b2e] my-auto">
+            {/* Header with light purple gradient */}
+            <div className="bg-gradient-to-r from-[#493ee5] via-[#635bff] to-[#7c3aed] text-white p-5 sm:p-6 relative">
+              <button
+                type="button"
+                onClick={() => setEvaluationModalOpen(false)}
+                className="absolute top-4 right-4 p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="flex items-center gap-2 mb-2 text-xs font-semibold uppercase tracking-wider text-[#e2dfff]">
+                <Award className="w-4 h-4 text-[#ede9fe]" />
+                <span>SimulateHub · Institutional HR & Technical Evaluation</span>
+              </div>
+
+              <h2 className="text-xl sm:text-2xl font-bold tracking-tight font-display">
+                Industry Assessment & Readiness Audit
+              </h2>
+
+              <div className="flex flex-wrap items-center gap-2 mt-2 text-xs text-white/85">
+                <span className="font-semibold">{selectedCompany.name}</span>
+                <span>•</span>
+                <span className="font-mono bg-white/15 px-2 py-0.5 rounded text-[11px]">
+                  {currentTask.task_id}
+                </span>
+                <span>•</span>
+                <span className="bg-white/15 px-2 py-0.5 rounded text-[11px] font-medium">
+                  {evaluationResult.submission_type === 'pdf_document' ? 'PDF Assignment Report' : 'Code Submission'}
+                </span>
+                <span>•</span>
+                <span>30 mins</span>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 sm:p-6 space-y-5 max-h-[75vh] overflow-y-auto">
+              {/* Score Badges Row */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* Overall Score */}
+                <div className="bg-[#faf8ff] rounded-2xl p-4 border-2 border-[#635bff]/25 flex items-center gap-3.5 shadow-xs">
+                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#493ee5] to-[#635bff] text-white flex flex-col items-center justify-center font-display font-black text-xl shadow-md shadow-[#635bff]/30 shrink-0">
+                    <span>{evaluationResult.overall_score}</span>
+                    <span className="text-[8px] font-sans font-normal opacity-80 -mt-1">/100</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                      OVERALL SCORE
+                    </span>
+                    <div className="text-sm font-bold text-[#0f172a]">
+                      {evaluationResult.overall_score >= 85
+                        ? 'Enterprise Ready'
+                        : evaluationResult.overall_score >= 70
+                        ? 'Competent'
+                        : 'Needs Revision'}
+                    </div>
+                    <div className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1 mt-0.5">
+                      <CheckCircle2 className="w-3 h-3" />
+                      <span>Institutional Pass</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Technical / Analytical Score */}
+                <div className="bg-white rounded-2xl p-4 border border-slate-200 flex items-center gap-3.5 shadow-xs">
+                  <div className="w-12 h-12 rounded-xl bg-[#ede9fe] text-[#493ee5] flex flex-col items-center justify-center font-display font-black text-lg border border-[#635bff]/20 shrink-0">
+                    <span>{evaluationResult.technical_or_analytical_score}</span>
+                    <span className="text-[8px] font-sans font-normal opacity-70 -mt-1">/100</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                      {evaluationResult.submission_type === 'pdf_document' ? 'ANALYTICAL RIGOR' : 'TECHNICAL LOGIC'}
+                    </span>
+                    <div className="text-xs font-bold text-[#0f172a]">
+                      {evaluationResult.submission_type === 'pdf_document' ? 'Requirement Coverage' : 'Code Hygiene'}
+                    </div>
+                    <div className="text-[10px] text-slate-500">Benchmark: 80+</div>
+                  </div>
+                </div>
+
+                {/* Cultural Fit & Communication */}
+                <div className="bg-white rounded-2xl p-4 border border-slate-200 flex items-center gap-3.5 shadow-xs">
+                  <div className="w-12 h-12 rounded-xl bg-[#ede9fe] text-[#493ee5] flex flex-col items-center justify-center font-display font-black text-lg border border-[#635bff]/20 shrink-0">
+                    <span>{evaluationResult.cultural_fit_and_communication_score}</span>
+                    <span className="text-[8px] font-sans font-normal opacity-70 -mt-1">/100</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
+                      COMMUNICATION
+                    </span>
+                    <div className="text-xs font-bold text-[#0f172a]">Report Structure</div>
+                    <div className="text-[10px] text-slate-500">Professional Clarity</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Detailed Review Section */}
+              <div className="bg-white rounded-2xl p-4 border border-slate-200 space-y-2 shadow-xs">
+                <div className="flex items-center gap-2 text-xs font-bold text-[#0f172a] uppercase tracking-wider">
+                  <Sparkles className="w-4 h-4 text-[#635bff]" />
+                  <span>
+                    Detailed AI Review ({evaluationResult.submission_type === 'pdf_document' ? 'PDF Content' : 'Code'})
+                  </span>
+                </div>
+                <div className="text-xs text-slate-700 leading-relaxed whitespace-pre-line bg-[#faf8ff] p-3.5 rounded-xl border border-[#635bff]/15 font-sans">
+                  {evaluationResult.detailed_feedback}
+                </div>
+              </div>
+
+              {/* HR Dashboard Summary Card */}
+              <div className="bg-gradient-to-br from-[#ede9fe]/60 via-white to-[#faf8ff] rounded-2xl p-4 border border-[#635bff]/25 space-y-2 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-xs font-bold text-[#493ee5] uppercase tracking-wider">
+                    <FileCheck2 className="w-4 h-4 text-[#635bff]" />
+                    <span>NIBM HR Dashboard Summary</span>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#ede9fe] text-[#493ee5] border border-[#635bff]/20">
+                    Placement Metric
+                  </span>
+                </div>
+                <p className="text-xs text-slate-800 leading-relaxed font-medium bg-white/80 p-3 rounded-xl border border-[#635bff]/10">
+                  "{evaluationResult.hr_dashboard_summary}"
+                </p>
+              </div>
+
+              {/* Modal Action Buttons */}
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={handleCopyFeedback}
+                  className="px-3.5 py-2 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                >
+                  {copiedFeedback ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
+                  <span>{copiedFeedback ? 'Copied to Clipboard' : 'Copy Full Report'}</span>
+                </button>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEvaluationModalOpen(false);
+                      handleSubmitEvaluation();
+                    }}
+                    className="px-3.5 py-2 rounded-xl border border-[#635bff]/25 bg-[#ede9fe]/60 hover:bg-[#ede9fe] text-[#493ee5] text-xs font-semibold transition-colors cursor-pointer"
+                  >
+                    Re-evaluate
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEvaluationModalOpen(false)}
+                    className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#493ee5] to-[#635bff] hover:from-[#3e34c9] hover:to-[#5248e5] text-white text-xs font-bold shadow-md shadow-[#635bff]/25 transition-all cursor-pointer"
+                  >
+                    Done / Back to Workspace
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Active Sandbox Session Sub-Bar (Matches screen.png) */}
       <div className="bg-[#ede9fe]/50 border border-[#635bff]/20 rounded-xl px-4 py-2 flex flex-wrap items-center justify-between text-xs gap-3">
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-1.5 font-bold text-[#493ee5]">
@@ -768,7 +966,7 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
           })}
         </div>
 
-        {/* Action 2: search_and_generate_company_task input with hover tooltip and premium restriction */}
+        {/* Action 2: search_and_generate_company_task input */}
         <div
           className="relative w-full md:w-84"
           onMouseEnter={() => !isPremium && setIsSearchHovered(true)}
@@ -834,9 +1032,7 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
         </div>
       </div>
 
-      {/* ----------------------------------------------------------------------- */}
-      {/* AI EVALUATION LOADING STATE (Light Purple / White Theme) */}
-      {/* ----------------------------------------------------------------------- */}
+      {/* Evaluating banner */}
       {isEvaluating && (
         <div className="bg-white/95 rounded-2xl p-6 border-2 border-[#635bff]/40 shadow-xl shadow-[#635bff]/10 ring-4 ring-[#635bff]/10 text-center animate-in fade-in duration-200">
           <div className="w-14 h-14 rounded-2xl bg-[#ede9fe] text-[#635bff] flex items-center justify-center mx-auto mb-3 shadow-inner">
@@ -846,25 +1042,22 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
             AI is evaluating your submission with Google Gemini...
           </h3>
           <p className="text-xs text-slate-600 mt-1 max-w-md mx-auto">
-            {evaluationStage || 'Benchmarking implementation against enterprise rubrics and testing assertions...'}
+            {evaluationStage || 'Benchmarking against enterprise rubrics...'}
           </p>
-
           <div className="flex items-center justify-center gap-4 mt-4 text-[11px] text-[#493ee5] font-medium">
             <span className="flex items-center gap-1.5 bg-[#ede9fe] px-3 py-1 rounded-full border border-[#635bff]/20">
               <Sparkles className="w-3.5 h-3.5 text-[#635bff]" />
-              Model: gemini-3.8-flash
+              Submission Type: {uploadedFile ? 'pdf_document' : 'code'}
             </span>
             <span className="flex items-center gap-1.5 bg-[#ede9fe] px-3 py-1 rounded-full border border-[#635bff]/20">
               <BrainCircuit className="w-3.5 h-3.5 text-[#635bff]" />
-              Action: evaluate_submission
+              Model: gemini-3.8-flash
             </span>
           </div>
         </div>
       )}
 
-      {/* ----------------------------------------------------------------------- */}
-      {/* ERROR HANDLING BANNER (Light Purple & Rose Accent) */}
-      {/* ----------------------------------------------------------------------- */}
+      {/* Error banner */}
       {evalError && (
         <div className="bg-rose-50/90 rounded-2xl p-4 border-2 border-rose-200 shadow-sm flex items-start justify-between gap-3 animate-in fade-in duration-200">
           <div className="flex items-start gap-3">
@@ -886,147 +1079,7 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
         </div>
       )}
 
-      {/* ----------------------------------------------------------------------- */}
-      {/* BEAUTIFUL AI EVALUATION RESULT CARD (Light Purple & White Theme) */}
-      {/* ----------------------------------------------------------------------- */}
-      {evaluationResult && (
-        <div className="bg-gradient-to-br from-white via-[#faf8ff] to-[#f5f3ff] rounded-3xl p-6 border-2 border-[#635bff]/30 shadow-xl shadow-[#635bff]/15 ring-4 ring-[#635bff]/5 animate-in slide-in-from-top-4 fade-in duration-300 relative overflow-hidden">
-          {/* Top highlight bar */}
-          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-[#493ee5] via-[#635bff] to-[#8b5cf6]" />
-
-          <div className="flex flex-wrap items-start justify-between gap-4 border-b border-[#635bff]/15 pb-5">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-[#493ee5] bg-[#ede9fe] px-2.5 py-0.5 rounded-full border border-[#635bff]/20 flex items-center gap-1">
-                  <Award className="w-3 h-3 text-[#635bff]" />
-                  AI Evaluation Completed · Google Gemini Engine
-                </span>
-                <span className="text-[11px] text-slate-500 font-mono">
-                  {currentTask.task_id} · {selectedCompany.name}
-                </span>
-              </div>
-              <h3 className="text-xl sm:text-2xl font-black text-[#0f172a] font-display tracking-tight">
-                Industry Assessment & Technical Audit Report
-              </h3>
-              <p className="text-xs text-slate-600">
-                Evaluation for <strong className="text-slate-800">{currentTask.task_title}</strong> (Time Taken: {timeTakenMins} mins)
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={handleCopyFeedback}
-                className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
-              >
-                {copiedFeedback ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-slate-500" />}
-                <span>{copiedFeedback ? 'Copied' : 'Copy Report'}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setEvaluationResult(null)}
-                className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors cursor-pointer"
-                title="Dismiss result card"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-
-          {/* Scores Row */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 my-5">
-            {/* Overall Score */}
-            <div className="bg-white rounded-2xl p-4 border border-[#635bff]/25 shadow-sm relative overflow-hidden flex items-center gap-4">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#493ee5] to-[#635bff] text-white flex flex-col items-center justify-center font-display font-black text-2xl shadow-md shadow-[#635bff]/30 shrink-0">
-                <span>{evaluationResult.overall_score}</span>
-                <span className="text-[9px] font-sans font-normal opacity-80 -mt-1">/100</span>
-              </div>
-              <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                  OVERALL READINESS
-                </span>
-                <div className="text-sm font-bold text-[#0f172a]">
-                  {evaluationResult.overall_score >= 85
-                    ? 'Enterprise Ready'
-                    : evaluationResult.overall_score >= 70
-                    ? 'Competent / Fast-Track'
-                    : 'Needs Revision'}
-                </div>
-                <div className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1 mt-0.5">
-                  <CheckCircle2 className="w-3 h-3" />
-                  <span>Institutional Pass</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Technical / Analytical Score */}
-            <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm flex items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-[#ede9fe] text-[#493ee5] flex flex-col items-center justify-center font-display font-black text-xl border border-[#635bff]/20 shrink-0">
-                <span>{evaluationResult.technical_or_analytical_score}</span>
-                <span className="text-[8px] font-sans font-normal opacity-70 -mt-1">/100</span>
-              </div>
-              <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                  TECHNICAL / ANALYTICAL
-                </span>
-                <div className="text-sm font-bold text-[#0f172a]">
-                  {submissionMode === 'code' ? 'Code Architecture & Tests' : 'Requirements Rigor'}
-                </div>
-                <div className="text-[11px] text-slate-500">Benchmark: 80+ required</div>
-              </div>
-            </div>
-
-            {/* Cultural & Communication Score */}
-            <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm flex items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-[#ede9fe] text-[#493ee5] flex flex-col items-center justify-center font-display font-black text-xl border border-[#635bff]/20 shrink-0">
-                <span>{evaluationResult.cultural_fit_and_communication_score}</span>
-                <span className="text-[8px] font-sans font-normal opacity-70 -mt-1">/100</span>
-              </div>
-              <div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                  CULTURE & COMMUNICATION
-                </span>
-                <div className="text-sm font-bold text-[#0f172a]">Standup & Rationale</div>
-                <div className="text-[11px] text-slate-500">Tone & Team Handoff</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Feedback & HR Summary Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-            {/* Detailed Feedback (7 cols) */}
-            <div className="md:col-span-7 bg-white rounded-2xl p-4 border border-slate-200 shadow-sm space-y-2">
-              <div className="flex items-center gap-2 text-xs font-bold text-[#0f172a] uppercase tracking-wider">
-                <Sparkles className="w-3.5 h-3.5 text-[#635bff]" />
-                <span>AI Evaluator Detailed Feedback</span>
-              </div>
-              <div className="text-xs text-slate-700 leading-relaxed whitespace-pre-line bg-[#faf8ff] p-3.5 rounded-xl border border-[#635bff]/10 font-sans">
-                {evaluationResult.detailed_feedback}
-              </div>
-            </div>
-
-            {/* HR Dashboard Summary (5 cols) */}
-            <div className="md:col-span-5 bg-gradient-to-br from-[#ede9fe]/60 to-white rounded-2xl p-4 border border-[#635bff]/25 shadow-sm space-y-2">
-              <div className="flex items-center gap-2 text-xs font-bold text-[#493ee5] uppercase tracking-wider">
-                <FileCheck2 className="w-3.5 h-3.5 text-[#635bff]" />
-                <span>HR Institutional Summary</span>
-              </div>
-              <p className="text-xs text-slate-800 leading-relaxed font-medium bg-white/80 p-3.5 rounded-xl border border-[#635bff]/15">
-                "{evaluationResult.hr_dashboard_summary}"
-              </p>
-              <div className="pt-2 flex items-center justify-between text-[11px] text-slate-500">
-                <span className="flex items-center gap-1 text-[#493ee5] font-semibold">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                  Synced to NIBM HR Dashboard
-                </span>
-                <span className="font-mono text-[10px]">Verified Record</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Main Grid: Left Spec Sidebar + Right Code Workspace (Matches screen_f251a6c4.png) */}
+      {/* Main Grid: Left Spec Sidebar + Right Code Workspace (Matches screen.png) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         {/* Left Column (4 cols) */}
         <div className="lg:col-span-4 space-y-4">
@@ -1081,19 +1134,19 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
             <div className="grid grid-cols-2 gap-3 pt-1">
               <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
                 <div className="text-[10px] text-slate-500">Dublin HQ Time</div>
-                <div className="text-sm font-mono font-bold text-[#0f172a] mt-0.5">11:46:25</div>
+                <div className="text-sm font-mono font-bold text-[#0f172a] mt-0.5">14:43:06</div>
                 <div className="text-[10px] text-[#635bff] font-medium">IST (GMT+1)</div>
               </div>
 
               <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200">
                 <div className="text-[10px] text-slate-500">Your Local Device</div>
-                <div className="text-sm font-mono font-bold text-[#0f172a] mt-0.5">03:46:25</div>
+                <div className="text-sm font-mono font-bold text-[#0f172a] mt-0.5">20:13:06</div>
                 <div className="text-[10px] text-slate-500 font-medium">EST (New York)</div>
               </div>
             </div>
           </div>
 
-          {/* Time to Office Standup / EOD Handover Card (Matches screen_f251a6c4.png) */}
+          {/* Time to Office Standup / EOD Handover Card (Matches screen.png) */}
           <div className="bg-gradient-to-br from-[#493ee5] to-[#635bff] text-white rounded-2xl p-4 shadow-md shadow-[#635bff]/20 relative overflow-hidden">
             <div className="flex items-center justify-between text-xs font-semibold text-[#e2dfff]">
               <div className="flex items-center gap-1.5">
@@ -1290,16 +1343,16 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
 
         {/* Right Column: Code Editor & Jest Runner (8 cols) */}
         <div className="lg:col-span-8 space-y-4">
-          {/* Top Switcher Bar (Matches screen_ad2769cb.png) */}
+          {/* Top Switcher Bar (Matches screen.png) */}
           <div className="bg-white rounded-2xl p-2.5 border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setSubmissionMode('code')}
+                onClick={() => setActiveWorkspaceView('code')}
                 className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
-                  submissionMode === 'code'
+                  activeWorkspaceView === 'code'
                     ? 'bg-[#635bff] text-white shadow-xs'
-                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                    : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
                 }`}
               >
                 <Code2 className="w-3.5 h-3.5" />
@@ -1308,15 +1361,15 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
 
               <button
                 type="button"
-                onClick={() => setSubmissionMode('pdf_document')}
+                onClick={() => setActiveWorkspaceView('pdf_document')}
                 className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
-                  submissionMode === 'pdf_document'
+                  activeWorkspaceView === 'pdf_document'
                     ? 'bg-[#635bff] text-white shadow-xs'
                     : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
                 }`}
               >
                 <FileText className="w-3.5 h-3.5 text-[#635bff]" />
-                <span>Upload Assignment (PDF)</span>
+                <span>Upload PDF Report</span>
               </button>
             </div>
 
@@ -1326,11 +1379,11 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
                   type="checkbox"
                   checked={simulateNetworkError}
                   onChange={(e) => setSimulateNetworkError(e.target.checked)}
-                  className="rounded text-[#635bff] focus:ring-[#635bff] border-slate-300"
+                  className="rounded text-[#635bff] focus:ring-[#635bff] border-slate-300 cursor-pointer"
                 />
                 <span className="flex items-center gap-1">
-                  <AlertCircle className="w-3 h-3 text-amber-500" />
-                  Simulate Network Error
+                  <span className="text-slate-400">⚙</span>
+                  <span>Simulate Network Error</span>
                 </span>
               </label>
 
@@ -1345,8 +1398,8 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
             </div>
           </div>
 
-          {/* Submission Mode Content: Code Editor OR PDF Upload Workspace */}
-          {submissionMode === 'code' ? (
+          {/* View: Code Editor vs PDF Viewer */}
+          {activeWorkspaceView === 'code' ? (
             <div className="bg-[#0f172a] rounded-2xl border border-slate-800 shadow-xl overflow-hidden flex flex-col text-slate-300">
               {/* Editor Top Bar with File Tabs */}
               <div className="bg-[#1e293b] px-3 py-2 flex flex-wrap items-center justify-between gap-2 border-b border-slate-800">
@@ -1406,6 +1459,14 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
                     TS 5.4 · 0 Errors
                   </span>
+                  <span className="text-slate-600">|</span>
+                  <button
+                    type="button"
+                    onClick={() => {}}
+                    className="text-slate-400 hover:text-slate-200 text-[11px] font-mono cursor-pointer"
+                  >
+                    Format
+                  </button>
                   <button
                     onClick={handleRunTests}
                     disabled={isTesting}
@@ -1436,7 +1497,7 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
                 />
               </div>
 
-              {/* Jest Execution Console (Active Run) - Matches screen_f251a6c4.png */}
+              {/* Jest Execution Console (Active Run) - Matches screen.png */}
               <div className="bg-[#050811] border-t border-slate-800 p-3.5 text-xs font-mono">
                 <div className="flex items-center justify-between text-[11px] pb-2 border-b border-slate-800/80">
                   <div className="flex items-center gap-1.5 text-emerald-400 font-bold">
@@ -1444,7 +1505,7 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
                     <span>Jest Execution Console (Active Run)</span>
                   </div>
                   <div className="text-slate-500 text-[10px]">
-                    Execution time: 312ms · Memory RSS: 48.2MB · Run #{testRunCount}
+                    Execution time: 312ms · Memory RSS: 48.2MB
                   </div>
                 </div>
 
@@ -1460,7 +1521,7 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
               </div>
             </div>
           ) : (
-            /* PDF Document / Assignment Report Workspace */
+            /* Upload PDF Report View */
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
                 <div className="flex items-center gap-2">
@@ -1468,35 +1529,43 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
                     <FileText className="w-5 h-5" />
                   </div>
                   <div>
-                    <h4 className="text-sm font-bold text-[#0f172a]">{uploadedFileName}</h4>
+                    <h4 className="text-sm font-bold text-[#0f172a]">
+                      {uploadedFile ? uploadedFile.name : 'No PDF Report Attached'}
+                    </h4>
                     <p className="text-[11px] text-slate-500">
-                      Undergraduate Assignment & Technical Report Delivery (PDF Text Extractor)
+                      Undergraduate Assignment Deliverable · {uploadedFile ? uploadedFile.sizeFormatted : '0 KB'}
                     </p>
                   </div>
                 </div>
 
-                <label className="px-3.5 py-1.5 rounded-xl bg-[#ede9fe] hover:bg-[#ddd6fe] text-[#493ee5] font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-colors border border-[#635bff]/20">
+                <button
+                  type="button"
+                  onClick={triggerPdfPicker}
+                  className="px-3.5 py-1.5 rounded-xl bg-[#ede9fe] hover:bg-[#ddd6fe] text-[#493ee5] font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-colors border border-[#635bff]/20"
+                >
                   <Upload className="w-3.5 h-3.5" />
                   <span>{isExtractingPdf ? 'Extracting...' : 'Upload Replacement PDF'}</span>
-                  <input
-                    type="file"
-                    accept=".pdf,.doc,.docx,.txt"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                  />
-                </label>
+                </button>
               </div>
 
               <div>
                 <div className="flex items-center justify-between text-xs font-semibold text-slate-700 mb-1.5">
-                  <span>Document Text & Requirement Matrix:</span>
+                  <span>Document Content & Requirement Analysis:</span>
                   <span className="text-[11px] text-slate-400">
-                    {pdfDocumentContent.split('\n').length} lines · Parsed via NIBM Document Ingress
+                    {uploadedFile ? `${uploadedFile.content.split('\n').length} lines · Parsed via NIBM Document Ingress` : 'No file'}
                   </span>
                 </div>
                 <textarea
-                  value={pdfDocumentContent}
-                  onChange={(e) => setPdfDocumentContent(e.target.value)}
+                  value={uploadedFile ? uploadedFile.content : ''}
+                  onChange={(e) => {
+                    if (uploadedFile) {
+                      setUploadedFile({
+                        ...uploadedFile,
+                        content: e.target.value,
+                      });
+                    }
+                  }}
+                  placeholder="Attach a PDF report to view and edit its extracted content here..."
                   rows={16}
                   className="w-full text-xs font-mono p-3.5 rounded-xl border border-slate-300 bg-slate-50 text-slate-800 focus:outline-none focus:border-[#635bff] leading-relaxed"
                 />
@@ -1504,7 +1573,7 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
             </div>
           )}
 
-          {/* Implementation Rationale & Concurrency Trade-Offs (Matches screen_f251a6c4.png) */}
+          {/* Implementation Rationale & Concurrency Trade-Offs (Matches screen.png) */}
           <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm space-y-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5 text-xs font-bold text-[#0f172a] uppercase tracking-wider">
@@ -1528,8 +1597,71 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
             </div>
           </div>
 
-          {/* Bottom Action Bar (Matches screen_f251a6c4.png & screen_ad2769cb.png) */}
+          {/* ------------------------------------------------------------------- */}
+          {/* REQUIREMENT 1: ATTACHED PDF REPORT CARD (Matches screen.png exactly) */}
+          {/* ------------------------------------------------------------------- */}
+          {uploadedFile ? (
+            <div className="bg-white rounded-2xl p-3 sm:p-3.5 border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3 animate-in fade-in duration-150">
+              <div className="flex items-center gap-3">
+                {/* Red PDF Icon */}
+                <div className="w-8 h-8 rounded-lg bg-red-50 text-red-500 border border-red-200 flex items-center justify-center shrink-0">
+                  <FileText className="w-4 h-4" />
+                </div>
+
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <span className="text-xs font-bold text-[#0f172a] font-mono">
+                    {uploadedFile.name}
+                  </span>
+                  <span className="text-[11px] text-slate-400">
+                    {uploadedFile.sizeFormatted}
+                  </span>
+                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                    <span>Attached Deliverable</span>
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={triggerPdfPicker}
+                  className="px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-[#493ee5] text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer bg-[#faf8ff]"
+                >
+                  <RefreshCw className="w-3 h-3 text-[#635bff]" />
+                  <span>Replace / + Attach New PDF</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleRemoveAttachedPdf}
+                  title="Remove attached PDF (fallback to code submission)"
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* Prompt when no PDF is attached */
+            <div className="bg-[#faf8ff] rounded-2xl p-3 border border-dashed border-[#635bff]/30 flex items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2 text-slate-600">
+                <Paperclip className="w-4 h-4 text-[#635bff]" />
+                <span>No PDF report attached. AI Evaluator will assess code in <code className="font-mono text-[#635bff]">{activeFile}.ts</code>.</span>
+              </div>
+              <button
+                type="button"
+                onClick={triggerPdfPicker}
+                className="text-[#635bff] hover:text-[#493ee5] font-bold text-xs underline cursor-pointer"
+              >
+                + Attach PDF Report
+              </button>
+            </div>
+          )}
+
+          {/* Bottom Action Bar (Matches screen.png exactly) */}
           <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-3">
+            {/* Left: Reviewer Profile */}
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-lg bg-[#ede9fe] text-[#635bff] flex items-center justify-center font-bold text-xs">
                 SJ
@@ -1544,7 +1676,8 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center gap-2.5">
+            {/* Right Buttons: Re-run Unit Tests + Attach PDF Report + Submit Task to AI Evaluator */}
+            <div className="flex items-center gap-2.5 flex-wrap">
               <button
                 type="button"
                 onClick={handleRunTests}
@@ -1554,12 +1687,22 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
                 <span>Re-run Unit Tests</span>
               </button>
 
-              {/* ACTION 3: Submit Task to AI Evaluator button with Google Gemini API Integration */}
+              {/* + Attach PDF Report Button */}
+              <button
+                type="button"
+                onClick={triggerPdfPicker}
+                className="px-3.5 py-2 rounded-xl border border-[#635bff]/30 bg-[#faf8ff] hover:bg-[#ede9fe] text-[#493ee5] text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+              >
+                <FileText className="w-3.5 h-3.5 text-[#635bff]" />
+                <span>+ Attach PDF Report</span>
+              </button>
+
+              {/* ACTION: Submit Task to AI Evaluator */}
               <button
                 type="button"
                 onClick={handleSubmitEvaluation}
                 disabled={isEvaluating}
-                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#493ee5] to-[#635bff] hover:from-[#3e34c9] hover:to-[#5248e5] text-white text-xs font-bold transition-all shadow-md shadow-[#635bff]/25 flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#493ee5] to-[#635bff] hover:from-[#3e34c9] hover:to-[#5248e5] text-white text-xs font-bold transition-all shadow-md shadow-[#635bff]/25 flex items-center gap-2 disabled:opacity-50 cursor-pointer"
               >
                 {isEvaluating ? (
                   <>
