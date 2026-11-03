@@ -10,6 +10,7 @@ import {
   Cloud,
   LogOut,
   UserCheck,
+  Check,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -20,6 +21,8 @@ interface HeaderProps {
   unlockedPlan?: string;
   role: 'admin' | 'student';
   userEmail: string;
+  userName?: string;
+  plan?: string;
   onLogout: () => void;
 }
 
@@ -31,6 +34,8 @@ export const Header: React.FC<HeaderProps> = ({
   unlockedPlan = 'Institutional NIBM Premium',
   role,
   userEmail,
+  userName,
+  plan = 'pro',
   onLogout,
 }) => {
   return (
@@ -54,8 +59,14 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="text-emerald-400 font-medium">Gemini 3.8 Flash Engine</span>
           </div>
           <span className="text-slate-500">|</span>
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white/10 text-white font-semibold">
-            {role === 'admin' ? '🛡️ Role: Admin' : '🎓 Role: Student (Undergraduate)'}
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-white/10 text-white font-semibold">
+            {role === 'admin' ? (
+              <>🛡️ Role: Admin (Full Access)</>
+            ) : (
+              <>
+                🎓 Role: Student · <span className="text-[#c3c0ff] uppercase">{plan} Tier</span>
+              </>
+            )}
           </span>
         </div>
       </div>
@@ -163,10 +174,19 @@ export const Header: React.FC<HeaderProps> = ({
           {/* User profile & Logout button */}
           <div className="flex items-center gap-2.5 pl-2 border-l border-slate-200">
             <div className="hidden sm:flex flex-col text-right">
-              <span className="text-xs font-bold text-[#0f172a]">{userEmail}</span>
-              <span className="text-[10px] text-slate-500 uppercase font-semibold">
-                {role === 'admin' ? 'Super Admin' : 'IT Student'}
+              <span className="text-xs font-bold text-[#0f172a] truncate max-w-[150px]">
+                {userName || userEmail}
               </span>
+              <div className="flex items-center gap-1 justify-end">
+                <span className="text-[10px] text-slate-500 uppercase font-semibold">
+                  {role === 'admin' ? 'Super Admin' : 'Student'}
+                </span>
+                {role === 'student' && plan && (
+                  <span className="text-[9px] font-bold px-1.5 py-0.2 rounded-full bg-[#ede9fe] text-[#493ee5] uppercase">
+                    {plan}
+                  </span>
+                )}
+              </div>
             </div>
 
             <div
@@ -176,7 +196,7 @@ export const Header: React.FC<HeaderProps> = ({
                   : 'bg-gradient-to-tr from-[#635bff] to-[#8b5cf6] ring-[#635bff]/20'
               }`}
             >
-              {role === 'admin' ? 'AD' : 'KW'}
+              {role === 'admin' ? 'AD' : (userName ? userName.slice(0, 2).toUpperCase() : 'ST')}
             </div>
 
             {/* Logout Button */}

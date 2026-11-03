@@ -18,7 +18,7 @@ const STORAGE_COHORT_KEY = 'SIMULATEHUB_NIBM_COHORT_V2';
 const STORAGE_SESSION_KEY = 'SIMULATEHUB_NIBM_USER_SESSION';
 
 export default function App() {
-  // 1. Authentication & RBAC Session State
+  // 1. Authentication & RBAC Session State (stores current user & selected plan)
   const [currentUser, setCurrentUser] = useState<UserSession | null>(() => {
     try {
       const savedSession = localStorage.getItem(STORAGE_SESSION_KEY);
@@ -31,7 +31,7 @@ export default function App() {
     return null;
   });
 
-  // Active navigation tab conditioned by role
+  // Active navigation tab conditioned strictly by role
   const [activeTab, setActiveTab] = useState<'simulation' | 'dashboard' | 'playground'>('simulation');
 
   // Selected company and current task
@@ -69,11 +69,10 @@ export default function App() {
     }
   }, [cohortRecords]);
 
-  // Sync user session to localStorage
+  // Sync user session to localStorage & enforce default view per role
   useEffect(() => {
     if (currentUser) {
       localStorage.setItem(STORAGE_SESSION_KEY, JSON.stringify(currentUser));
-      // Set appropriate initial view based on role
       if (currentUser.role === 'admin') {
         setActiveTab('dashboard');
       } else {
@@ -121,7 +120,10 @@ export default function App() {
       studentName: currentUser?.name || 'Kasun Wickramasinghe',
       studentId: 'NIBM-BSE-22.1-018',
       companyName: selectedCompany.name,
-      techStack: ('required_technology' in currentTask ? currentTask.required_technology : currentTask.detected_tech_stack) || selectedCompany.techStack,
+      techStack:
+        ('required_technology' in currentTask
+          ? currentTask.required_technology
+          : currentTask.detected_tech_stack) || selectedCompany.techStack,
       task: currentTask,
       submission,
       timeTakenMins,
@@ -142,9 +144,9 @@ export default function App() {
     setUnlockedPlan(`Unlocked: ${code} Institutional Premium`);
   };
 
-  // -------------------------------------------------------------
-  // RULE 6: If user is not logged in, STRICTLY ONLY show Login
-  // -------------------------------------------------------------
+  // -------------------------------------------------------------------------
+  // RULE 6: If user is not logged in, STRICTLY ONLY render the Login/Sign Up
+  // -------------------------------------------------------------------------
   if (!currentUser) {
     return <Login onLogin={handleLogin} />;
   }
@@ -160,12 +162,14 @@ export default function App() {
         unlockedPlan={unlockedPlan}
         role={currentUser.role}
         userEmail={currentUser.email}
+        userName={currentUser.name}
+        plan={currentUser.plan}
         onLogout={handleLogout}
       />
 
       {/* Main View Container with Strict RBAC rules */}
       <main className="flex-1 pb-14">
-        {/* STUDENT VIEW: ONLY Sandbox Workspace, Countdown timer, and Task Simulator. NEVER HR Dashboard */}
+        {/* STUDENT VIEW: ONLY Student Workspace. Students are strictly prevented from HR components */}
         {currentUser.role === 'student' && (
           <SimulationWorkspace
             currentTask={currentTask}
@@ -216,10 +220,10 @@ export default function App() {
         />
       )}
 
-      {/* Institutional Footer */}
+      {/* Institutional Footer with Active Session & Plan info */}
       <footer className="border-t border-slate-200/80 bg-white py-4 text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="font-semibold text-slate-700">SimulateHub Secure Enterprise Simulation Gateway</span>
             <span>•</span>
             <span className="font-mono text-[11px] text-slate-400">Environment v2.4</span>
@@ -227,6 +231,11 @@ export default function App() {
             <span className="font-bold text-[#493ee5]">
               Session: {currentUser.role.toUpperCase()} ({currentUser.email})
             </span>
+            {currentUser.plan && (
+              <span className="px-2 py-0.5 rounded-full bg-[#ede9fe] text-[#493ee5] font-bold text-[10px] uppercase">
+                {currentUser.plan} Plan
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-4 text-[11px] text-slate-500">
