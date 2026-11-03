@@ -125,23 +125,27 @@ export const EvaluationModal: React.FC<EvaluationModalProps> = ({
               </span>
             </div>
 
-            {/* Technical Accuracy Score */}
+            {/* Technical or Analytical Score */}
             <div className="p-4 rounded-2xl border border-slate-200 bg-[#faf8ff] flex flex-col items-center justify-center text-center">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                Technical Accuracy
+                Technical / Analytical Score
               </span>
               <div className="flex items-baseline gap-1 my-1 text-[#0f172a]">
-                <span className="text-4xl font-black font-display">{evaluation.technical_accuracy_score}</span>
+                <span className="text-4xl font-black font-display">
+                  {evaluation.technical_or_analytical_score ?? evaluation.technical_accuracy_score ?? 85}
+                </span>
                 <span className="text-sm font-semibold text-slate-400">/100</span>
               </div>
               <div className="w-full bg-slate-200 rounded-full h-1.5 mt-2">
                 <div
                   className="h-1.5 rounded-full bg-[#635bff]"
-                  style={{ width: `${evaluation.technical_accuracy_score}%` }}
+                  style={{ width: `${evaluation.technical_or_analytical_score ?? evaluation.technical_accuracy_score ?? 85}%` }}
                 ></div>
               </div>
               <span className="text-[11px] font-medium text-slate-500 mt-2">
-                Code Logic & Idempotency
+                {evaluation.submission_type === 'pdf_document'
+                  ? 'Analytical Thinking & BRS'
+                  : 'Syntax, Logic & Resilience'}
               </span>
             </div>
 

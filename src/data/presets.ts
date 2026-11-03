@@ -19,6 +19,27 @@ export const COMPANY_PRESETS: CompanyPreset[] = [
     accentColor: '#635bff',
     logoBg: '#635bff',
     logoText: 'S|',
+    defaultSubmissionType: 'code',
+  },
+  {
+    id: 'ifs-world',
+    name: 'IFS Enterprise Cloud',
+    verified: true,
+    track: 'Business Analysis & Agile Systems Track',
+    location: 'Colombo Tech Hub · IST',
+    assignedRole: 'Associate Business Analyst & Product Consultant',
+    squad: 'Squad: ERP Digital Supply Chain & Requirements',
+    techStack: 'Business Analysis, UML 2.5, Agile Scrum, BPMN, Jira',
+    culture: 'Client-first stakeholder empathy, clear requirement traceability, structured MoSCoW prioritization and crisp user stories',
+    managerName: 'Priyantha De Silva',
+    managerRole: 'Lead Business Analyst & Scrum Master',
+    managerHandle: 'Colombo Hub (@pdesilva)',
+    managerAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
+    timezoneLabel: 'IST Shift: 9:00 AM - 5:30 PM IST (Colombo Hub)',
+    accentColor: '#8b5cf6',
+    logoBg: '#8b5cf6',
+    logoText: 'IFS',
+    defaultSubmissionType: 'pdf_document',
   },
   {
     id: 'apex-fintech',
@@ -38,6 +59,7 @@ export const COMPANY_PRESETS: CompanyPreset[] = [
     accentColor: '#493ee5',
     logoBg: '#493ee5',
     logoText: 'AF',
+    defaultSubmissionType: 'code',
   },
   {
     id: 'carecloud-health',
@@ -57,6 +79,7 @@ export const COMPANY_PRESETS: CompanyPreset[] = [
     accentColor: '#0284c7',
     logoBg: '#0284c7',
     logoText: 'CC',
+    defaultSubmissionType: 'code',
   },
   {
     id: 'neoscale-ai',
@@ -73,9 +96,10 @@ export const COMPANY_PRESETS: CompanyPreset[] = [
     managerHandle: 'SF HQ (@lchen)',
     managerAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
     timezoneLabel: 'PST Shift: 9:30 PM - 5:30 AM IST',
-    accentColor: '#8b5cf6',
-    logoBg: '#8b5cf6',
+    accentColor: '#635bff',
+    logoBg: '#635bff',
     logoText: 'NS',
+    defaultSubmissionType: 'code',
   },
 ];
 
@@ -86,10 +110,47 @@ export const INITIAL_DEFAULT_TASK: GenerateTaskResponse = {
   task_title: 'Hardened Idempotent Webhook Ingestion Layer',
   scenario_description: 'The Dublin Core Platform team needs a hardened, idempotent webhook ingestion layer. Downstream billing retries during intermittent network drops have caused duplicate transaction credits in test accounts. Review the spec, protect the Redis lock release against zombie worker lifespans, and ensure SHA256 header validation passes our test matrix.',
   required_technology: 'TypeScript 5.4, Redis 7.2, Node.js 20 LTS, Jest, Express 4.19',
+  tech_stack_or_domain: 'TypeScript 5.4, Redis 7.2, Node.js 20 LTS, Jest, Express 4.19',
   simulated_timezone_and_hours: 'UK Shift: 2:00 PM - 10:00 PM IST (Dublin HQ · UTC+1)',
   manager_instructions: 'Welcome to Sprint Cycle 4! The Dublin Core Platform team needs a hardened, idempotent webhook ingestion layer. Downstream billing retries during intermittent network drops have caused duplicate transaction credits in test accounts. Review the spec, protect the Redis lock release against zombie worker lifespans, and ensure SHA256 header validation passes our test matrix.',
-  expected_deliverable: '1. Distributed Redis Locking (SET NX EX with 10,000ms TTL).\n2. HMAC-SHA256 Signature Verification against raw byte buffers.\n3. Handle Race Conditions & Cached Replay returning 200 HTTP with stored payload.\n4. Pass Edge-Case Regression Suites with zero dropped packets.',
+  expected_deliverable: 'Specify Deliverable: Submit Code Implementation containing: 1. Distributed Redis Locking (SET NX EX with 10,000ms TTL); 2. HMAC-SHA256 Signature Verification against raw byte buffers; 3. Handle Race Conditions & Cached Replay returning 200 HTTP with stored payload; 4. Pass Edge-Case Regression Suites with zero dropped packets.',
 };
+
+export const SAMPLE_BA_PDF_REPORT = `# BUSINESS REQUIREMENTS SPECIFICATION (BRS) & WORKFLOW SPECIFICATION
+Project: Enterprise Automated Order Fulfillment & Inventory Reconciliation
+Author: Kasun Wickramasinghe (NIBM IT Undergraduate / Trainee Business Analyst)
+Client / Org: IFS Enterprise Cloud
+Date: November 2026 | Version: 1.2 (Sprint 4 Ready)
+
+## 1. Executive Summary & Problem Statement
+Currently, multi-channel procurement orders experience asynchronous stock discrepancy delays averaging 18 minutes between checkout and warehouse distribution nodes. This document defines the functional requirements, BPMN workflow, and user acceptance criteria for an automated, real-time event-driven reconciliation pipeline.
+
+## 2. Stakeholder RACI Matrix
+- Responsible (R): Lead Systems Engineer & Platform Team
+- Accountable (A): Associate Product Manager & Business Analyst
+- Consulted (C): Warehouse Logistics Leads & Finance Auditor
+- Informed (I): Customer Support Operations & Store Managers
+
+## 3. Scope & Requirement Traceability (MoSCoW Prioritized)
+- [FR-01] [Must Have]: Real-time webhook receipt with sub-second acknowledgement.
+- [FR-02] [Must Have]: Atomic stock reservation against Central ERP inventory database.
+- [FR-03] [Should Have]: Replay detection guard to reject duplicate order event payloads.
+- [FR-04] [Could Have]: Automated manager notification if stock threshold drops below 15 units.
+- [NFR-01] Performance: The ingestion endpoint must process 99.9% of requests in < 120ms.
+- [NFR-02] Compliance: Complete ISO 27001 audit logging for every credit / debit mutation.
+
+## 4. BPMN 2.0 Activity Workflow & UML Use-Case
+[Customer Checkout] -> [Order Gateway Ingress] -> {Verify HMAC & Nonce}
+  -> [Check Distributed Cache for Event ID]
+    - If Duplicate: Return 200 Cached Order State
+    - If New: Lock SKU in Redis -> Post to Atomic Settlement Ledger -> Emit Kafka Event -> Send 200 Success.
+
+## 5. User Acceptance Criteria (Gherkin Syntax)
+Scenario: Preventing duplicate checkout deduction on client retry
+  Given an order with unique transaction ID "TXN-88210" has already been processed
+  When the payment gateway retries sending the webhook payload
+  Then the system identifies the existing receipt without incrementing inventory debits
+  And returns HTTP 200 OK with the cached settlement confirmation.`;
 
 export const CODE_WORKSPACE_FILES = {
   webhookHandler: `import { Request, Response } from 'express';
@@ -159,7 +220,7 @@ describe('Stripe Webhook Idempotency Layer', () => {
   });
 });`,
 
-  terminalLog: `[SimulateHub Sandbox Daemon v2.4]
+  terminalLog: `[SimulateHub Sandbox Daemon v2.5]
 Allocated: 2 vCPU / 4GB RAM · Container initialized in 184ms
 Redis Cluster connected at 127.0.0.1:6379 (OK)
 Ready for sprint execution.`
@@ -174,10 +235,12 @@ export const INITIAL_NIBM_COHORT: CompletedSimulation[] = [
     techStack: 'TypeScript 5.4, Redis 7.2, Node.js 20',
     task: INITIAL_DEFAULT_TASK,
     submission: CODE_WORKSPACE_FILES.webhookHandler,
+    submissionType: 'code',
     timeTakenMins: 75,
     evaluation: {
       action_type: 'evaluate_submission_response',
       overall_score: 94,
+      technical_or_analytical_score: 96,
       technical_accuracy_score: 96,
       cultural_fit_and_communication_score: 91,
       detailed_feedback: 'What was done right:\n• Excellent usage of distributed single-flight Redis locks via SET NX PX.\n• Authentic cryptographic HMAC verification prior to any state mutations.\n• Clean status response handling.\n\nWhat needs improvement:\n• Add retry backoff wrapper around Redis connection pool drops.\n• Introduce structured OpenTelemetry span tracing for cross-service observability.',
@@ -198,20 +261,55 @@ export const INITIAL_NIBM_COHORT: CompletedSimulation[] = [
       task_title: 'HIPAA-Compliant Patient Telemetry Sanitization',
       scenario_description: 'Construct a secure data ingestion filter that redacts Personally Identifiable Information (PII) before telemetry events hit external analytical clusters.',
       required_technology: 'Python 3.11, FastAPI, Docker',
+      tech_stack_or_domain: 'Python 3.11, FastAPI, Docker',
       simulated_timezone_and_hours: 'US Eastern Shift: 6:30 PM - 2:30 AM IST',
       manager_instructions: 'Attention to detail is non-negotiable. Any unmasked Social Security or Medical Record numbers will fail FDA/HIPAA compliance.',
-      expected_deliverable: '1. FastAPI regex filter middleware. 2. Cryptographic salt masking. 3. Audit trail logger.'
+      expected_deliverable: 'Specify Deliverable: Submit Code Implementation with FastAPI regex filter middleware, cryptographic salt masking, and audit trail logger.'
     },
     submission: `Developed a Pydantic regex validator middleware scrubbing SSN, MRN, and patient names with cryptographic salt masking before persisting to telemetry buckets.`,
+    submissionType: 'code',
     timeTakenMins: 85,
     evaluation: {
       action_type: 'evaluate_submission_response',
       overall_score: 89,
+      technical_or_analytical_score: 92,
       technical_accuracy_score: 92,
       cultural_fit_and_communication_score: 85,
       detailed_feedback: 'What was done right:\n• Well-crafted defensive implementation adhering to HIPAA requirements.\n• Thorough audit logging with clean code commentary.\n\nWhat needs improvement:\n• Add automated unit test assertions for malformed unicode payloads.',
       hr_dashboard_summary: 'The student demonstrated strong foundational problem-solving in Python 3.11, FastAPI, Docker and completed the task within the expected simulation window. Recommended as industry-ready for healthcare software teams.'
     },
     completedAt: '2026-11-01T16:15:00Z'
+  },
+  {
+    id: 'SIM-NIBM-003',
+    studentName: 'Dineth Perera',
+    studentId: 'NIBM-MIS-22.1-007',
+    companyName: 'IFS Enterprise Cloud',
+    techStack: 'Business Analysis, UML, BPMN 2.0, Agile',
+    task: {
+      action_type: 'generate_task_response',
+      task_id: 'TASK-IFS-102',
+      company_name: 'IFS Enterprise Cloud',
+      task_title: 'Enterprise Business Requirements Specification (BRS) & Traceability Matrix',
+      scenario_description: 'Define the functional requirements, BPMN workflow, and Gherkin acceptance criteria for automated ERP stock reconciliation.',
+      required_technology: 'Business Analysis, UML, BPMN 2.0, Agile',
+      tech_stack_or_domain: 'Business Analysis, UML, BPMN 2.0, Agile',
+      simulated_timezone_and_hours: 'IST Shift: 9:00 AM - 5:30 PM IST',
+      manager_instructions: 'Clarity and requirement traceability are paramount. Ensure your functional requirements link directly to business value and identify edge cases.',
+      expected_deliverable: 'Specify Deliverable: Submit a PDF Report covering Executive Summary, RACI Matrix, MoSCoW Prioritized Requirements, BPMN Diagram, and Acceptance Criteria.'
+    },
+    submission: SAMPLE_BA_PDF_REPORT,
+    submissionType: 'pdf_document',
+    timeTakenMins: 70,
+    evaluation: {
+      action_type: 'evaluate_submission_response',
+      overall_score: 92,
+      technical_or_analytical_score: 94,
+      technical_accuracy_score: 94,
+      cultural_fit_and_communication_score: 90,
+      detailed_feedback: 'What was done right:\n• Exceptional requirement traceability and structured MoSCoW prioritization.\n• Flawless Gherkin acceptance criteria.\n• Clear executive summary with problem definition.\n\nWhat needs improvement:\n• Include explicit error fallback states in the BPMN workflow diagram.\n• Add quantifiable latency thresholds to the NFR matrix.',
+      hr_dashboard_summary: 'The candidate demonstrated outstanding business analysis aptitude and structured requirements engineering for "Enterprise BRS" within 70 minutes. Highly recommended for business analyst or product consulting internship roles.'
+    },
+    completedAt: '2026-11-02T11:20:00Z'
   }
 ];

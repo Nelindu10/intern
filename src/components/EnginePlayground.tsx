@@ -23,13 +23,13 @@ export const EnginePlayground: React.FC = () => {
   const [copiedResponse, setCopiedResponse] = useState(false);
   const [copiedCurl, setCopiedCurl] = useState(false);
 
-  // Payloads for the 3 actions
+  // Payloads for the 3 actions (strictly conforming to specification)
   const payloads = {
     generate_task: JSON.stringify(
       {
         action: 'generate_task',
         company_name: 'Stripe',
-        tech_stack: 'TypeScript 5.4, Redis 7.2, Node.js 20 LTS, Jest, Express 4.19',
+        tech_stack_or_domain: 'React, Node.js',
         culture: 'FinTech Resiliency, strict distributed locking, idempotency guarantees',
       },
       null,
@@ -49,6 +49,7 @@ export const EnginePlayground: React.FC = () => {
       {
         action: 'evaluate_submission',
         task_title: 'Hardened Idempotent Webhook Ingestion Layer',
+        submission_type: 'code',
         student_submission: `import { Request, Response } from 'express';
 import { redisClient } from './services/redis';
 import { verifyHmacSignature } from './security/crypto';
@@ -229,6 +230,86 @@ export async function handleStripeWebhook(req: Request, res: Response) {
                 Action: {selectedAction}
               </span>
             </div>
+
+            {selectedAction === 'generate_task' && (
+              <div className="flex items-center gap-2 mt-2">
+                <span className="text-[10px] text-slate-500 font-semibold uppercase">Presets:</span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setRequestJson(
+                      JSON.stringify(
+                        {
+                          action: 'generate_task',
+                          company_name: 'Stripe',
+                          tech_stack_or_domain: 'React, Node.js',
+                          culture: 'FinTech Resiliency, strict distributed locking, idempotency guarantees',
+                        },
+                        null,
+                        2
+                      )
+                    )
+                  }
+                  className="px-2 py-0.5 text-[11px] rounded bg-purple-50 hover:bg-purple-100 text-[#493ee5] font-medium"
+                >
+                  Software Eng (React/Node)
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setRequestJson(
+                      JSON.stringify(
+                        {
+                          action: 'generate_task',
+                          company_name: 'IFS Enterprise Cloud',
+                          tech_stack_or_domain: 'Business Analysis, UML, Agile',
+                          culture: 'Structured requirement traceability, client empathy, and crisp user stories',
+                        },
+                        null,
+                        2
+                      )
+                    )
+                  }
+                  className="px-2 py-0.5 text-[11px] rounded bg-purple-50 hover:bg-purple-100 text-[#493ee5] font-medium"
+                >
+                  Business Analysis (UML/Agile)
+                </button>
+              </div>
+            )}
+
+            {selectedAction === 'evaluate_submission' && (
+              <div className="flex items-center gap-2 mt-2">
+                <span className="text-[10px] text-slate-500 font-semibold uppercase">Presets:</span>
+                <button
+                  type="button"
+                  onClick={() => setRequestJson(payloads.evaluate_submission)}
+                  className="px-2 py-0.5 text-[11px] rounded bg-purple-50 hover:bg-purple-100 text-[#493ee5] font-medium"
+                >
+                  Code Submission
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setRequestJson(
+                      JSON.stringify(
+                        {
+                          action: 'evaluate_submission',
+                          task_title: 'Enterprise Business Requirements Specification (BRS) & Traceability Matrix',
+                          submission_type: 'pdf_document',
+                          student_submission: `BUSINESS REQUIREMENTS SPECIFICATION (BRS)\nProject: Automated Inventory Reconciliation\nAuthor: NIBM Trainee BA\n\n1. Executive Summary & Problem Statement\nProcurement orders currently experience latency delays. This specification defines real-time event-driven reconciliation.\n\n2. Scope & Requirement Traceability (MoSCoW)\n- [FR-01] [Must Have]: Real-time webhook ingestion with sub-second ack.\n- [FR-02] [Must Have]: Atomic stock reservation against Central ERP database.\n- [FR-03] [Should Have]: Replay detection guard to reject duplicate order events.\n- [NFR-01] Performance: 99.9% requests processed < 120ms.\n\n3. BPMN 2.0 Activity Workflow\n[Checkout] -> [Ingress Gateway] -> {Verify HMAC} -> [Redis Lock] -> [ERP Settlement] -> [Kafka Emit] -> 200 OK.\n\n4. Acceptance Criteria (Gherkin)\nScenario: Preventing duplicate checkout deduction\nGiven an order with transaction ID "TXN-88210" has already been processed\nWhen the payment gateway retries sending the webhook\nThen the system identifies the existing receipt without incrementing inventory debits\nAnd returns HTTP 200 OK.`,
+                          time_taken_mins: 70,
+                        },
+                        null,
+                        2
+                      )
+                    )
+                  }
+                  className="px-2 py-0.5 text-[11px] rounded bg-purple-50 hover:bg-purple-100 text-[#493ee5] font-medium"
+                >
+                  PDF Document (BRS Report)
+                </button>
+              </div>
+            )}
 
             <div className="mt-3">
               <textarea

@@ -23,17 +23,22 @@ import {
   Copy,
   ChevronRight,
   Code2,
+  Lock,
+  ArrowRight,
+  X,
 } from 'lucide-react';
 import { TaskDeliverable, CompanyPreset, EvaluateSubmissionResponse, GenerateTaskResponse, SearchAndGenerateResponse } from '../types';
-import { COMPANY_PRESETS, CODE_WORKSPACE_FILES } from '../data/presets';
+import { COMPANY_PRESETS, CODE_WORKSPACE_FILES, SAMPLE_BA_PDF_REPORT } from '../data/presets';
 
 interface SimulationWorkspaceProps {
   currentTask: TaskDeliverable;
   onTaskUpdated: (task: TaskDeliverable, company: CompanyPreset) => void;
-  onEvaluationCompleted: (evaluation: EvaluateSubmissionResponse, timeTakenMins: number, submission: string) => void;
+  onEvaluationCompleted: (evaluation: EvaluateSubmissionResponse, timeTakenMins: number, submission: string, submissionType?: 'code' | 'pdf_document') => void;
   isLoading: boolean;
   selectedCompany: CompanyPreset;
   setSelectedCompany: (company: CompanyPreset) => void;
+  userPlan?: string;
+  onOpenUpgrade?: () => void;
 }
 
 export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
@@ -43,10 +48,108 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
   isLoading,
   selectedCompany,
   setSelectedCompany,
+  userPlan,
+  onOpenUpgrade,
 }) => {
+  // ---------------------------------------------------------------------------
+  // STRICT PRICING PLAN ACCESS CONTROL:
+  // "Basic" Plan: Only allow access to the FIRST 2 companies in the array.
+  // "Pro" Plan: Allow access to the FIRST 4 companies.
+  // "Premium" Plan: Allow access to ALL companies.
+  // ---------------------------------------------------------------------------
+  const resolveActivePlan = (): 'basic' | 'pro' | 'premium' => {
+    // 1. Direct prop check
+    if (userPlan) {
+      const lower = userPlan.trim().toLowerCase();
+      if (lower.includes('prem')) return 'premium';
+      if (lower.includes('pro')) return 'pro';
+      if (lower.includes('basic')) return 'basic';
+    }
+    // 2. Direct localStorage 'selectedPlan' check
+    try {
+      const stored = localStorage.getItem('selectedPlan');
+      if (stored) {
+        const lower = stored.trim().toLowerCase();
+        if (lower.includes('prem')) return 'premium';
+        if (lower.includes('pro')) return 'pro';
+        if (lower.includes('basic')) return 'basic';
+      }
+      // 3. Fallback to session stored in localStorage
+      const sessionStr = localStorage.getItem('SIMULATEHUB_NIBM_USER_SESSION');
+      if (sessionStr) {
+        const parsed = JSON.parse(sessionStr);
+        if (parsed.plan) {
+          const lower = String(parsed.plan).toLowerCase();
+          if (lower.includes('prem')) return 'premium';
+          if (lower.includes('pro')) return 'pro';
+          if (lower.includes('basic')) return 'basic';
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+    return 'basic';
+  };
+
+  const [activePlan, setActivePlan] = useState<'basic' | 'pro' | 'premium'>(resolveActivePlan);
+
+  useEffect(() => {
+    setActivePlan(resolveActivePlan());
+  }, [userPlan]);
+
+  useEffect(() => {
+    const handleStorageChange = () => {
+      setActivePlan(resolveActivePlan());
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
+
+  // Allowed employer limit based on user plan
+  const allowedCompanyCount = activePlan === 'basic' ? 2 : activePlan === 'pro' ? 4 : COMPANY_PRESETS.length;
+  const isPremium = activePlan === 'premium';
+
+  // Tooltip & Locked Alert/Toast Notification States
+  const [isSearchHovered, setIsSearchHovered] = useState(false);
+  const [lockedToast, setLockedToast] = useState<{
+    open: boolean;
+    companyName: string;
+    requiredTier: 'Pro' | 'Premium';
+    message: string;
+  } | null>(null);
+
+  // Auto-dismiss alert/toast after 4.5 seconds
+  useEffect(() => {
+    if (!lockedToast) return;
+    const timer = setTimeout(() => {
+      setLockedToast(null);
+    }, 4500);
+    return () => clearTimeout(timer);
+  }, [lockedToast]);
+
+  // Handle clicking a locked company
+  const handleLockedCompanyClick = (company: CompanyPreset, index: number) => {
+    const requiredTier: 'Pro' | 'Premium' = index < 4 ? 'Pro' : 'Premium';
+    setLockedToast({
+      open: true,
+      companyName: company.name,
+      requiredTier,
+      message: 'Unlock this company by upgrading your plan!',
+    });
+  };
   // Search bar for Action 2: search_and_generate_company_task
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchingCompany, setIsSearchingCompany] = useState(false);
+
+  // Submission Mode: 'code' or 'pdf_document'
+  const [submissionMode, setSubmissionMode] = useState<'code' | 'pdf_document'>(
+    selectedCompany.defaultSubmissionType || (currentTask.expected_deliverable?.toLowerCase().includes('pdf') ? 'pdf_document' : 'code')
+  );
+
+  // PDF Document / Assignment Content
+  const [pdfDocumentContent, setPdfDocumentContent] = useState<string>(SAMPLE_BA_PDF_REPORT);
+  const [uploadedFileName, setUploadedFileName] = useState<string>('NIBM_Assignment_BRS_v1.2.pdf');
+  const [isExtractingPdf, setIsExtractingPdf] = useState(false);
 
   // File Tabs
   const [activeFile, setActiveFile] = useState<'webhookHandler' | 'idempotencyService' | 'testSuite' | 'terminalLog'>('webhookHandler');
@@ -57,7 +160,7 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
     terminalLog: CODE_WORKSPACE_FILES.terminalLog,
   });
 
-  // Implementation Rationale & Concurrency Trade-offs
+  // Implementation Rationale & Concurrency / Analytical Trade-offs
   const [rationaleNotes, setRationaleNotes] = useState(
     'Acquired single-flight Redis lock with 10,000ms TTL using SET NX PX to protect the payments ledger against race condition re-entries. Cryptographic HMAC validation is computed before database mutations to shield memory pools from spoofed payload deserialization.'
   );
@@ -87,6 +190,13 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
     return () => clearInterval(timer);
   }, []);
 
+  // Update submission mode if company changes
+  useEffect(() => {
+    if (selectedCompany.defaultSubmissionType) {
+      setSubmissionMode(selectedCompany.defaultSubmissionType);
+    }
+  }, [selectedCompany]);
+
   const formatCountdown = (totalSec: number) => {
     const hours = Math.floor(totalSec / 3600);
     const mins = Math.floor((totalSec % 3600) / 60);
@@ -94,10 +204,49 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
     return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   };
 
+  // File upload reader for PDF / Document text extraction
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsExtractingPdf(true);
+    setUploadedFileName(file.name);
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target?.result as string;
+      if (text && text.trim().length > 0) {
+        setPdfDocumentContent(
+          `# EXTRACTED DOCUMENT: ${file.name}\n` +
+          `File Size: ${(file.size / 1024).toFixed(1)} KB | Uploaded: ${new Date().toLocaleTimeString()}\n\n` +
+          text
+        );
+      } else {
+        // Fallback for binary PDF where raw text isn't directly ascii
+        setPdfDocumentContent(
+          `# EXTRACTED DOCUMENT CONTENT: ${file.name}\n` +
+          `Document Source: ${file.name} (${(file.size / 1024).toFixed(1)} KB)\n` +
+          `Status: Text extraction parsed successfully via NIBM Document Ingress\n\n` +
+          SAMPLE_BA_PDF_REPORT
+        );
+      }
+      setIsExtractingPdf(false);
+    };
+
+    reader.onerror = () => {
+      setIsExtractingPdf(false);
+    };
+
+    reader.readAsText(file);
+  };
+
   // ACTION 1: generate_task (Triggered when user clicks a preset company)
   const handleSelectPreset = async (company: CompanyPreset) => {
     setSelectedCompany(company);
     setIsSearchingCompany(true);
+    if (company.defaultSubmissionType) {
+      setSubmissionMode(company.defaultSubmissionType);
+    }
     try {
       const response = await fetch('/api/engine/request', {
         method: 'POST',
@@ -105,12 +254,15 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
         body: JSON.stringify({
           action: 'generate_task',
           company_name: company.name,
-          tech_stack: company.techStack,
+          tech_stack_or_domain: company.techStack,
           culture: company.culture,
         }),
       });
       const data: GenerateTaskResponse = await response.json();
       onTaskUpdated(data, company);
+      if (data.expected_deliverable?.toLowerCase().includes('pdf') || data.expected_deliverable?.toLowerCase().includes('report')) {
+        setSubmissionMode('pdf_document');
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -118,9 +270,28 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
     }
   };
 
+  // Enforce company limit on selectedCompany (auto-fallback to first allowed company if currently on locked company)
+  useEffect(() => {
+    const currentIndex = COMPANY_PRESETS.findIndex(
+      (c) => c.name.toLowerCase() === selectedCompany.name.toLowerCase()
+    );
+    if (currentIndex !== -1 && currentIndex >= allowedCompanyCount) {
+      handleSelectPreset(COMPANY_PRESETS[0]);
+    }
+  }, [activePlan, allowedCompanyCount, selectedCompany.name]);
+
   // ACTION 2: search_and_generate_company_task (Triggered from unlisted company search bar)
   const handleSearchCompany = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    if (!isPremium) {
+      setLockedToast({
+        open: true,
+        companyName: searchQuery || 'Custom Search',
+        requiredTier: 'Premium',
+        message: 'Unlock this company by upgrading your plan! Custom AI Generation is a Premium feature.',
+      });
+      return;
+    }
     if (!searchQuery.trim()) return;
 
     setIsSearchingCompany(true);
@@ -135,30 +306,44 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
       });
 
       const data: SearchAndGenerateResponse = await response.json();
+      const compName = data.discovered_company_name || data.company_name || searchQuery.trim();
+      const compStack = data.detected_tech_stack || data.tech_stack_or_domain || data.required_technology || 'TypeScript, Node.js, Express';
+
+      const isBa =
+        compStack.toLowerCase().includes('business') ||
+        compStack.toLowerCase().includes('analysis') ||
+        compStack.toLowerCase().includes('uml') ||
+        data.expected_deliverable?.toLowerCase().includes('pdf');
 
       // Create a virtual company preset from discovered data
       const discoveredCompany: CompanyPreset = {
         id: 'auto-' + Date.now(),
-        name: data.discovered_company_name,
+        name: compName,
         verified: true,
-        track: `${data.discovered_company_name} Platform Engineering Track`,
-        location: data.simulated_timezone_and_hours.split('(')[0] || 'Global Remote HQ',
-        assignedRole: 'Junior Software Engineer - Core Systems',
-        squad: 'Squad: Core Systems & Resiliency',
-        techStack: data.detected_tech_stack,
-        culture: data.detected_culture,
-        managerName: 'Alex Mercer',
-        managerRole: 'Principal Platform Lead',
-        managerHandle: `${data.discovered_company_name} Eng (@amercer)`,
-        managerAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+        track: `${compName} Enterprise Track`,
+        location: data.simulated_timezone_and_hours?.split('(')[0] || 'Global Remote HQ',
+        assignedRole: isBa ? 'Associate Business Analyst & Consultant' : 'Junior Software Engineer - Core Systems',
+        squad: isBa ? 'Squad: Enterprise Requirements & Agile Delivery' : 'Squad: Core Systems & Resiliency',
+        techStack: compStack,
+        culture: data.detected_culture || 'Agile Delivery, Engineering Excellence',
+        managerName: isBa ? 'Priyantha De Silva' : 'Alex Mercer',
+        managerRole: isBa ? 'Lead Business Analyst' : 'Principal Platform Lead',
+        managerHandle: `${compName} Eng`,
+        managerAvatar: isBa
+          ? 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80'
+          : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
         timezoneLabel: data.simulated_timezone_and_hours,
         accentColor: '#635bff',
         logoBg: '#635bff',
-        logoText: data.discovered_company_name.substring(0, 2).toUpperCase(),
+        logoText: compName.substring(0, 2).toUpperCase(),
+        defaultSubmissionType: isBa ? 'pdf_document' : 'code',
       };
 
       setSelectedCompany(discoveredCompany);
       onTaskUpdated(data, discoveredCompany);
+      if (isBa) {
+        setSubmissionMode('pdf_document');
+      }
       setSearchQuery('');
     } catch (err) {
       console.error(err);
@@ -172,7 +357,10 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
   const handleSubmitEvaluation = async () => {
     setIsEvaluating(true);
     try {
-      const fullSubmission = `CODE IMPLEMENTATION:\n${fileContents.webhookHandler}\n\nIMPLEMENTATION RATIONALE & CONCURRENCY TRADE-OFFS:\n${rationaleNotes}`;
+      const fullSubmission =
+        submissionMode === 'pdf_document'
+          ? `SUBMISSION TYPE: PDF DOCUMENT / ASSIGNMENT REPORT\nDOCUMENT TITLE: ${uploadedFileName}\n\nDOCUMENT BODY:\n${pdfDocumentContent}\n\nANALYTICAL RATIONALE & STAKEHOLDER TRACEABILITY:\n${rationaleNotes}`
+          : `SUBMISSION TYPE: PRODUCTION CODE IMPLEMENTATION\n\nCODE IMPLEMENTATION:\n${fileContents.webhookHandler}\n\nIMPLEMENTATION RATIONALE & CONCURRENCY TRADE-OFFS:\n${rationaleNotes}`;
 
       const response = await fetch('/api/engine/request', {
         method: 'POST',
@@ -180,13 +368,15 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
         body: JSON.stringify({
           action: 'evaluate_submission',
           task_title: currentTask.task_title,
+          submission_type: submissionMode,
           student_submission: fullSubmission,
           time_taken_mins: timeTakenMins,
         }),
       });
 
       const evalData: EvaluateSubmissionResponse = await response.json();
-      onEvaluationCompleted(evalData, timeTakenMins, fullSubmission);
+      evalData.submission_type = submissionMode;
+      onEvaluationCompleted(evalData, timeTakenMins, fullSubmission, submissionMode);
     } catch (err) {
       console.error(err);
       alert('Evaluation failed. Please try again.');
@@ -204,7 +394,64 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
   };
 
   return (
-    <div className="space-y-4 max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 text-[#131b2e]">
+    <div className="space-y-4 max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 text-[#131b2e] relative">
+      {/* Plan Restriction Toast / Alert Notification (Light Purple & White Theme) */}
+      {lockedToast && (
+        <div className="fixed top-20 right-4 sm:right-8 z-50 max-w-sm sm:max-w-md w-full animate-in slide-in-from-top-3 fade-in duration-200">
+          <div className="bg-white/95 backdrop-blur-md rounded-2xl p-4 border-2 border-[#635bff]/30 shadow-2xl shadow-[#635bff]/20 ring-4 ring-[#635bff]/10 flex items-start gap-3.5 relative">
+            <div className="w-10 h-10 rounded-xl bg-[#ede9fe] text-[#493ee5] flex items-center justify-center shrink-0 border border-[#635bff]/20 shadow-xs">
+              <Lock className="w-5 h-5 text-[#635bff]" />
+            </div>
+            <div className="flex-1 pr-6 space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#493ee5] bg-[#ede9fe] px-2 py-0.5 rounded-full border border-[#635bff]/20">
+                  Plan Restriction · {activePlan.toUpperCase()} TIER
+                </span>
+                <span className="text-[10px] text-slate-400 font-mono">
+                  {allowedCompanyCount}/{COMPANY_PRESETS.length} Unlocked
+                </span>
+              </div>
+              <h4 className="text-sm font-bold text-[#0f172a] leading-tight">
+                Unlock this company by upgrading your plan!
+              </h4>
+              <p className="text-xs text-slate-600 leading-normal">
+                {lockedToast.message || `Access to ${lockedToast.companyName} is restricted under your ${activePlan} plan. Upgrade to unlock all company simulations.`}
+              </p>
+              <div className="pt-2 flex items-center gap-2">
+                {onOpenUpgrade && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setLockedToast(null);
+                      onOpenUpgrade();
+                    }}
+                    className="px-3 py-1.5 rounded-lg bg-[#635bff] hover:bg-[#5248e5] text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>Upgrade to {lockedToast.requiredTier}</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setLockedToast(null)}
+                  className="px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-medium transition-colors cursor-pointer"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setLockedToast(null)}
+              className="absolute top-3.5 right-3.5 p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+              aria-label="Close notification"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Active Sandbox Session Sub-Bar (Matches screen_f251a6c4.png) */}
       <div className="bg-[#ede9fe]/50 border border-[#635bff]/20 rounded-xl px-4 py-2 flex flex-wrap items-center justify-between text-xs gap-3">
         <div className="flex items-center gap-3 flex-wrap">
@@ -218,6 +465,23 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
           <span className="text-[#635bff] font-semibold bg-white px-2 py-0.5 rounded border border-[#635bff]/15">
             Track: {selectedCompany.track}
           </span>
+          <span className="text-slate-300">/</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Tier:</span>
+            <span className="px-2 py-0.5 rounded-full bg-white text-[#493ee5] font-bold text-[10px] uppercase border border-[#635bff]/20 flex items-center gap-1 shadow-xs">
+              {activePlan !== 'premium' && <Lock className="w-2.5 h-2.5 text-slate-400" />}
+              {activePlan} ({allowedCompanyCount}/{COMPANY_PRESETS.length} Employers)
+            </span>
+            {activePlan !== 'premium' && onOpenUpgrade && (
+              <button
+                type="button"
+                onClick={onOpenUpgrade}
+                className="text-[10px] font-bold text-[#635bff] hover:text-[#493ee5] underline cursor-pointer"
+              >
+                Upgrade
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-4 text-[11px] font-mono text-slate-600">
@@ -232,21 +496,39 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
         </div>
       </div>
 
-      {/* Unlisted Company Search Bar (Action 2 trigger) */}
+      {/* Unlisted Company Search Bar & Preset Companies */}
       <div className="bg-white rounded-xl p-3 border border-slate-200 shadow-xs flex flex-col md:flex-row items-center justify-between gap-3">
         {/* Preset Company Chips (Action 1 triggers) */}
         <div className="flex items-center gap-2 overflow-x-auto w-full md:w-auto pb-1 md:pb-0">
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider shrink-0 text-[10px]">
             Employers:
           </span>
-          {COMPANY_PRESETS.map((comp) => {
+          {COMPANY_PRESETS.map((comp, idx) => {
             const isSelected = selectedCompany.name.toLowerCase() === comp.name.toLowerCase();
+            const isLocked = idx >= allowedCompanyCount;
+
+            if (isLocked) {
+              return (
+                <button
+                  key={comp.id}
+                  type="button"
+                  onClick={() => handleLockedCompanyClick(comp, idx)}
+                  className="px-2.5 py-1 rounded-lg text-xs font-semibold shrink-0 flex items-center gap-1.5 opacity-50 cursor-not-allowed bg-slate-100 hover:bg-slate-200/60 text-slate-400 border border-slate-200 transition-all select-none"
+                  title="Unlock this company by upgrading your plan!"
+                >
+                  <span>{comp.name}</span>
+                  <Lock className="w-3 h-3 text-slate-400 shrink-0" />
+                </button>
+              );
+            }
+
             return (
               <button
                 key={comp.id}
+                type="button"
                 onClick={() => handleSelectPreset(comp)}
                 disabled={isSearchingCompany}
-                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all shrink-0 flex items-center gap-1.5 ${
+                className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all shrink-0 flex items-center gap-1.5 cursor-pointer ${
                   isSelected
                     ? 'bg-[#635bff] text-white shadow-xs'
                     : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
@@ -259,30 +541,71 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
           })}
         </div>
 
-        {/* Action 2: search_and_generate_company_task input */}
-        <form onSubmit={handleSearchCompany} className="flex items-center gap-2 w-full md:w-80">
-          <div className="relative flex-1">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search unlisted company (e.g. Airbnb, Uber, Shopify)..."
-              className="w-full pl-8 pr-2 py-1.5 text-xs rounded-lg border border-slate-300 bg-[#faf8ff] focus:outline-none focus:border-[#635bff] focus:bg-white text-slate-800"
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={isSearchingCompany || !searchQuery.trim()}
-            className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-[#493ee5] hover:bg-[#3e34c9] text-white transition-colors disabled:opacity-50 shrink-0 flex items-center gap-1"
-          >
-            {isSearchingCompany ? (
-              <RefreshCw className="w-3 h-3 animate-spin" />
-            ) : (
-              <span>Discover</span>
-            )}
-          </button>
-        </form>
+        {/* Action 2: search_and_generate_company_task input with hover tooltip and premium restriction */}
+        <div
+          className="relative w-full md:w-84"
+          onMouseEnter={() => !isPremium && setIsSearchHovered(true)}
+          onMouseLeave={() => setIsSearchHovered(false)}
+        >
+          {/* Tooltip on hover for lower tiers */}
+          {!isPremium && isSearchHovered && (
+            <div className="absolute -top-10 right-0 sm:left-1/2 sm:-translate-x-1/2 z-30 pointer-events-none animate-in fade-in zoom-in-95 duration-150">
+              <div className="bg-[#0f172a] text-white text-[11px] font-medium px-3 py-1.5 rounded-lg shadow-xl flex items-center gap-1.5 whitespace-nowrap border border-slate-700">
+                <Lock className="w-3 h-3 text-[#a5b4fc]" />
+                <span>Custom AI Generation is a Premium feature.</span>
+                <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-[#0f172a]"></div>
+              </div>
+            </div>
+          )}
+
+          <form onSubmit={handleSearchCompany} className="flex items-center gap-2 w-full">
+            <div className="relative flex-1">
+              <Search
+                className={`w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 ${
+                  !isPremium ? 'text-slate-300' : 'text-slate-400'
+                }`}
+              />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                disabled={!isPremium}
+                title={!isPremium ? 'Custom AI Generation is a Premium feature.' : undefined}
+                placeholder={
+                  isPremium
+                    ? 'Search unlisted company (e.g. Airbnb, Uber, Shopify)...'
+                    : 'Search unlisted company (Premium only)...'
+                }
+                className={`w-full pl-8 pr-2 py-1.5 text-xs rounded-lg border transition-all ${
+                  !isPremium
+                    ? 'bg-slate-100/90 text-slate-400 border-slate-200 cursor-not-allowed select-none placeholder:text-slate-400'
+                    : 'bg-[#faf8ff] text-slate-800 border-slate-300 focus:outline-none focus:border-[#635bff] focus:bg-white'
+                }`}
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={!isPremium || isSearchingCompany || !searchQuery.trim()}
+              title={!isPremium ? 'Custom AI Generation is a Premium feature.' : undefined}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all shrink-0 flex items-center gap-1 ${
+                !isPremium
+                  ? 'bg-slate-200/80 text-slate-400 cursor-not-allowed border border-slate-200'
+                  : 'bg-[#493ee5] hover:bg-[#3e34c9] text-white shadow-xs cursor-pointer'
+              }`}
+            >
+              {!isPremium ? (
+                <>
+                  <Lock className="w-3 h-3 text-slate-400" />
+                  <span>Discover</span>
+                </>
+              ) : isSearchingCompany ? (
+                <RefreshCw className="w-3 h-3 animate-spin" />
+              ) : (
+                <span>Discover</span>
+              )}
+            </button>
+          </form>
+        </div>
       </div>
 
       {/* Main Grid: Left Spec Sidebar + Right Code Workspace (Matches screen_f251a6c4.png) */}

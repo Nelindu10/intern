@@ -38,7 +38,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     cohortRecords.reduce((acc, curr) => acc + curr.evaluation.overall_score, 0) / (totalSimulations || 1)
   );
   const avgTech = Math.round(
-    cohortRecords.reduce((acc, curr) => acc + curr.evaluation.technical_accuracy_score, 0) / (totalSimulations || 1)
+    cohortRecords.reduce(
+      (acc, curr) => acc + (curr.evaluation.technical_or_analytical_score ?? curr.evaluation.technical_accuracy_score ?? 80),
+      0
+    ) / (totalSimulations || 1)
   );
   const avgCulture = Math.round(
     cohortRecords.reduce((acc, curr) => acc + curr.evaluation.cultural_fit_and_communication_score, 0) / (totalSimulations || 1)
@@ -85,7 +88,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       `"${r.companyName}"`,
       `"${r.task.task_id}"`,
       r.evaluation.overall_score,
-      r.evaluation.technical_accuracy_score,
+      r.evaluation.technical_or_analytical_score ?? r.evaluation.technical_accuracy_score ?? 80,
       r.evaluation.cultural_fit_and_communication_score,
       `"${r.timeTakenMins || 75} mins"`,
       `"${r.evaluation.hr_dashboard_summary.replace(/"/g, '""')}"`,
@@ -225,7 +228,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <th className="py-3 px-4">Student & ID</th>
                 <th className="py-3 px-4">Employer & Task</th>
                 <th className="py-3 px-4">Overall Score</th>
-                <th className="py-3 px-4">Tech Accuracy</th>
+                <th className="py-3 px-4">Tech / Analysis</th>
                 <th className="py-3 px-4">Cultural Fit</th>
                 <th className="py-3 px-4">Time Taken</th>
                 <th className="py-3 px-4">Placement Verdict</th>
@@ -267,7 +270,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </td>
 
                       <td className="py-3.5 px-4 font-mono font-semibold text-slate-800">
-                        {record.evaluation.technical_accuracy_score}%
+                        {record.evaluation.technical_or_analytical_score ?? record.evaluation.technical_accuracy_score ?? 80}%
                       </td>
 
                       <td className="py-3.5 px-4 font-mono font-semibold text-slate-800">

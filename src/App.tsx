@@ -73,6 +73,9 @@ export default function App() {
   useEffect(() => {
     if (currentUser) {
       localStorage.setItem(STORAGE_SESSION_KEY, JSON.stringify(currentUser));
+      if (currentUser.plan) {
+        localStorage.setItem('selectedPlan', currentUser.plan);
+      }
       if (currentUser.role === 'admin') {
         setActiveTab('dashboard');
       } else {
@@ -85,6 +88,9 @@ export default function App() {
 
   // Login handler
   const handleLogin = (session: UserSession) => {
+    if (session.plan) {
+      localStorage.setItem('selectedPlan', session.plan);
+    }
     setCurrentUser(session);
     if (session.role === 'admin') {
       setActiveTab('dashboard');
@@ -109,7 +115,8 @@ export default function App() {
   const handleEvaluationCompleted = (
     evaluation: EvaluateSubmissionResponse,
     timeTakenMins: number,
-    submission: string
+    submission: string,
+    submissionType?: 'code' | 'pdf_document'
   ) => {
     setCurrentEvaluation(evaluation);
     setLastTimeTakenMins(timeTakenMins);
@@ -126,6 +133,7 @@ export default function App() {
           : currentTask.detected_tech_stack) || selectedCompany.techStack,
       task: currentTask,
       submission,
+      submissionType: submissionType || 'code',
       timeTakenMins,
       evaluation,
       completedAt: new Date().toISOString(),
@@ -178,6 +186,8 @@ export default function App() {
             isLoading={false}
             selectedCompany={selectedCompany}
             setSelectedCompany={setSelectedCompany}
+            userPlan={currentUser.plan}
+            onOpenUpgrade={() => setIsPricingOpen(true)}
           />
         )}
 

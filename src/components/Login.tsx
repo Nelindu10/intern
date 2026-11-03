@@ -53,7 +53,26 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [accessKey, setAccessKey] = useState('');
 
   // Interactive Pricing Tier selection
-  const [selectedPlan, setSelectedPlan] = useState<PricingPlan>('pro');
+  const [selectedPlan, setSelectedPlan] = useState<PricingPlan>(() => {
+    try {
+      const stored = localStorage.getItem('selectedPlan');
+      if (stored === 'basic' || stored === 'pro' || stored === 'premium') {
+        return stored;
+      }
+    } catch (e) {
+      // ignore
+    }
+    return 'basic';
+  });
+
+  // Sync selectedPlan to localStorage whenever user chooses a tier
+  useEffect(() => {
+    try {
+      localStorage.setItem('selectedPlan', selectedPlan);
+    } catch (e) {
+      // ignore
+    }
+  }, [selectedPlan]);
 
   // Promo code state
   const [promoCode, setPromoCode] = useState('');
@@ -209,11 +228,14 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
           return;
         }
 
+        const studentPlan = foundStudent.selectedPlan || selectedPlan;
+        localStorage.setItem('selectedPlan', studentPlan);
+
         onLogin({
           email: foundStudent.email,
           role: 'student',
           name: foundStudent.name,
-          plan: foundStudent.selectedPlan || selectedPlan,
+          plan: studentPlan,
         });
         return;
       }
@@ -225,11 +247,14 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
           return;
         }
 
+        const fallbackPlan = selectedPlan || 'basic';
+        localStorage.setItem('selectedPlan', fallbackPlan);
+
         onLogin({
           email: 'student@nibm.lk',
           role: 'student',
           name: 'Kasun Wickramasinghe (Undergraduate)',
-          plan: selectedPlan,
+          plan: fallbackPlan,
         });
         return;
       }
