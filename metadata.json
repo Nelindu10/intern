@@ -1,0 +1,6 @@
+{
+  "name": "Virtual Internship Simulation Platform",
+  "description": "AI-driven virtual technical manager and HR evaluator simulating real-world industry tasks, code evaluations, and institutional readiness dashboards for undergraduate IT students.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

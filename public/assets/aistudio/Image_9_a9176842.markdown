@@ -1,0 +1,206 @@
+---
+name: Virtual Internship Simulation Platform
+colors:
+  surface: '#faf8ff'
+  surface-dim: '#d2d9f4'
+  surface-bright: '#faf8ff'
+  surface-container-lowest: '#ffffff'
+  surface-container-low: '#f2f3ff'
+  surface-container: '#eaedff'
+  surface-container-high: '#e2e7ff'
+  surface-container-highest: '#dae2fd'
+  on-surface: '#131b2e'
+  on-surface-variant: '#464555'
+  inverse-surface: '#283044'
+  inverse-on-surface: '#eef0ff'
+  outline: '#777587'
+  outline-variant: '#c7c4d8'
+  surface-tint: '#4c42e9'
+  primary: '#493ee5'
+  on-primary: '#ffffff'
+  primary-container: '#635bff'
+  on-primary-container: '#fefaff'
+  inverse-primary: '#c3c0ff'
+  secondary: '#6b38d4'
+  on-secondary: '#ffffff'
+  secondary-container: '#8455ef'
+  on-secondary-container: '#fffbff'
+  tertiary: '#5b5a6b'
+  on-tertiary: '#ffffff'
+  tertiary-container: '#747284'
+  on-tertiary-container: '#fefaff'
+  error: '#ba1a1a'
+  on-error: '#ffffff'
+  error-container: '#ffdad6'
+  on-error-container: '#93000a'
+  primary-fixed: '#e2dfff'
+  primary-fixed-dim: '#c3c0ff'
+  on-primary-fixed: '#0f0069'
+  on-primary-fixed-variant: '#321ed2'
+  secondary-fixed: '#e9ddff'
+  secondary-fixed-dim: '#d0bcff'
+  on-secondary-fixed: '#23005c'
+  on-secondary-fixed-variant: '#5516be'
+  tertiary-fixed: '#e4e0f5'
+  tertiary-fixed-dim: '#c7c4d8'
+  on-tertiary-fixed: '#1b1a29'
+  on-tertiary-fixed-variant: '#464555'
+  background: '#faf8ff'
+  on-background: '#131b2e'
+  surface-variant: '#dae2fd'
+typography:
+  display:
+    fontFamily: Plus Jakarta Sans
+    fontSize: 56px
+    fontWeight: '700'
+    lineHeight: 64px
+    letterSpacing: -0.03em
+  display-mobile:
+    fontFamily: Plus Jakarta Sans
+    fontSize: 36px
+    fontWeight: '700'
+    lineHeight: 44px
+    letterSpacing: -0.02em
+  headline-lg:
+    fontFamily: Plus Jakarta Sans
+    fontSize: 40px
+    fontWeight: '700'
+    lineHeight: 48px
+    letterSpacing: -0.025em
+  headline-lg-mobile:
+    fontFamily: Plus Jakarta Sans
+    fontSize: 28px
+    fontWeight: '700'
+    lineHeight: 36px
+    letterSpacing: -0.02em
+  headline-md:
+    fontFamily: Plus Jakarta Sans
+    fontSize: 28px
+    fontWeight: '600'
+    lineHeight: 36px
+    letterSpacing: -0.02em
+  headline-sm:
+    fontFamily: Plus Jakarta Sans
+    fontSize: 20px
+    fontWeight: '600'
+    lineHeight: 28px
+    letterSpacing: -0.015em
+  body-lg:
+    fontFamily: Inter
+    fontSize: 18px
+    fontWeight: '400'
+    lineHeight: 28px
+    letterSpacing: -0.01em
+  body-md:
+    fontFamily: Inter
+    fontSize: 16px
+    fontWeight: '400'
+    lineHeight: 24px
+    letterSpacing: -0.005em
+  body-sm:
+    fontFamily: Inter
+    fontSize: 14px
+    fontWeight: '400'
+    lineHeight: 20px
+  label-md:
+    fontFamily: Inter
+    fontSize: 14px
+    fontWeight: '500'
+    lineHeight: 20px
+    letterSpacing: 0.01em
+  label-sm:
+    fontFamily: Inter
+    fontSize: 12px
+    fontWeight: '600'
+    lineHeight: 16px
+    letterSpacing: 0.03em
+rounded:
+  sm: 0.125rem
+  DEFAULT: 0.25rem
+  md: 0.375rem
+  lg: 0.5rem
+  xl: 0.75rem
+  full: 9999px
+spacing:
+  gutter: 1.5rem
+  gutter-sm: 1rem
+  margin: 2rem
+  margin-sm: 1.25rem
+  margin-lg: 4rem
+  space-xs: 0.25rem
+  space-sm: 0.5rem
+  space-md: 1rem
+  space-lg: 1.5rem
+  space-xl: 2.5rem
+---
+
+## Brand & Style
+The brand targets university students, career switchers, and forward-thinking corporate recruiters seeking authentic job simulations. It projects an aura of academic rigor, corporate excellence, and quiet confidence. The visual tone is clear, luminous, and professional—balancing enterprise credibility with inviting accessibility.
+
+The aesthetic philosophy centers on modern editorial minimalism combined with soft luminescence. Pure white canvas spaces are structured by delicate lavender and slate lines, enriched by soft atmospheric violet accents. Interfaces reject heavy glassmorphism, aggressive gradients, and stark brutalism in favor of precision, deliberate negative space, and calm clarity.
+
+## Colors
+The color hierarchy is built around an immaculate white surface contrasted with deep indigo-tinted slate typography and refined purple accents.
+
+- **Primary (`#635BFF`)**: Electric iris violet, used exclusively for primary calls-to-action, active indicators, and focal points.
+- **Secondary (`#8B5CF6`)**: Soft violet, deployed for interactive hover states, subtle gradient stops, and secondary highlights.
+- **Tertiary (`#EDE9FE`)**: Pale lavender tint, engineered for container backdrops, badge fills, soft border washes, and hover highlights.
+- **Neutral (`#0F172A`)**: Deep slate, providing high-legibility typographic contrast without the harshness of pure black. Supporting text scales down into slate-muted shades (`#475569` and `#94A3B8`).
+- **Canvas Base**: Pure white (`#FFFFFF`) with ultra-subtle off-white surface layers (`#FAFAFD`) to delineate section alternation.
+
+## Typography
+Typographic rhythm relies on an expressive sans-serif pairing:
+
+- **Headlines & Display**: Set in **Plus Jakarta Sans**, offering geometric precision paired with open, friendly counters. Tighter letter-spacing creates an executive editorial tone appropriate for modern workforce technologies.
+- **Body & Data**: Driven by **Inter**, selected for its neutral, highly legible micro-typography across dense information spaces such as simulation dashboards, syllabi, and technical role descriptions.
+- **Contrast**: Headlines retain strong weights (600/700) against calm body weights (400) to produce immediate visual hierarchy without requiring loud color shifts.
+
+## Layout & Spacing
+The layout model employs a responsive 12-column grid within a maximum content container width of 1200px:
+
+- **Desktop (1024px+)**: 12 columns, 24px (`1.5rem`) gutters, and dynamic horizontal margins clamped at 64px (`4rem`). Sections employ generous vertical breathing room (80px to 120px) to uphold minimalist elegance.
+- **Tablet (768px – 1023px)**: 8 columns, 20px gutters, and 32px side margins. Multi-column cards shift into two-column matrices.
+- **Mobile (< 768px)**: 4 columns, 16px (`1rem`) gutters, and 20px (`1.25rem`) margins. Multi-column components collapse to single-column stacks with consistent `space-md` gaps.
+
+## Elevation & Depth
+Elevation favors crisp containment and ambient diffused shadows over thick borders or physical skeuomorphism:
+
+- **Low-Contrast Perimeter (Default Base)**: Surface depth is created via micro-borders using `1px solid rgba(99, 91, 255, 0.08)` or `1px solid #E2E8F0` rather than heavy drop shadows.
+- **Ambient Level 1 (Cards, Modules)**: `0 1px 3px rgba(15, 23, 42, 0.04), 0 6px 16px -4px rgba(99, 91, 255, 0.04)`.
+- **Ambient Level 2 (Hover States, Pricing Hero)**: `0 4px 6px -1px rgba(15, 23, 42, 0.03), 0 20px 32px -8px rgba(99, 91, 255, 0.08)`.
+- **Overlay Level 3 (Modals, Popovers)**: `0 12px 24px -4px rgba(15, 23, 42, 0.06), 0 24px 48px -12px rgba(15, 23, 42, 0.08)`.
+- **Luminescent Accent**: Select featured elements incorporate a delicate background bloom: an inset radial gradient of `rgba(237, 233, 254, 0.4)` anchored to top edges.
+
+## Shapes
+A disciplined "Soft" curvature philosophy is applied across the platform:
+
+- Base radius is 4px (`0.25rem`), keeping small elements like tags, inputs, and indicators sharp and precise.
+- Component-level surfaces (cards, modal panels, dialogs) utilize `rounded-lg` (8px / `0.5rem`) to maintain a clean architectural structure.
+- Specialty badge pills utilize full boundary rounding (`rounded-full`) to clearly differentiate metadata tags from interactive surfaces and content containers.
+
+## Components
+
+### Buttons
+- **Primary**: Solid `#635BFF` background with `#FFFFFF` text. Subtle border `1px solid rgba(255, 255, 255, 0.12)`. On hover, transitions to `#5248E5` with ambient shadow elevation.
+- **Secondary / Soft**: Background `#EDE9FE` with `#635BFF` text. On hover, background shifts to `#DDD6FE`.
+- **Outline**: Pure white background with `1px solid #E2E8F0` border and `#0F172A` text. On hover, border tint shifts to `#C7D2FE` and surface tint to `#F8FAFC`.
+- **Padding**: Vertical 10px, Horizontal 18px for standard actions; font weight is 500 (`label-md`).
+
+### Badges & Status Chips
+- Pill-shaped (`rounded-full`) with a vertical padding of 4px and horizontal padding of 10px.
+- Background uses soft tints (`#EDE9FE` or `#F1F5F9`) with uppercase or semi-bold lowercase text in `#635BFF` or `#475569`.
+- Live/Simulation indicators feature a 6px circular dot with a pulsating lavender aura.
+
+### Cards & Simulation Previews
+- Background is `#FFFFFF` enclosed by a 1px border of `rgba(99, 91, 255, 0.1)`.
+- Subtle inset padding of 24px.
+- Hover interactions feature a vertical translation of `-2px` alongside Ambient Level 2 elevation.
+
+### Refined Pricing Cards
+- **Standard Tier**: White card, `1px solid #E2E8F0`, Ambient Level 1 elevation, featuring slate text hierarchy and secondary button treatment.
+- **Featured / Recommended Tier**: Highlighted with a delicate border (`1px solid #635BFF`), a faint top gradient tint (`#FAF5FF` into `#FFFFFF`), an absolute-positioned top badge (`Best for Career Placement`), and Ambient Level 2 elevation with primary button styling.
+- Feature item rows display micro-checkmarks styled in `#635BFF` with 12px label margins.
+
+### Input Fields & Controls
+- **Inputs**: Crisp white surface, 1px neutral border (`#CBD5E1`), 8px border radius, 12px horizontal padding. Focused state utilizes a 1px `#635BFF` border and a 3px outer ring in `rgba(99, 91, 255, 0.15)`.
+- **Checkboxes & Radios**: Custom 18px square/circle with `#635BFF` active fill, displaying a crisp white interior icon.
