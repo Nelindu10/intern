@@ -95,16 +95,24 @@ export const Header: React.FC<HeaderProps> = ({
             </span>
             <span className="text-emerald-400 font-medium">Gemini 3.8 Flash Engine</span>
           </div>
-          <span className="text-slate-500">|</span>
           <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-white/10 text-white font-semibold">
             {role === 'admin' ? (
               <>🛡️ Role: Admin (Full Access)</>
             ) : (
               <>
-                🎓 Role: Student · <span className="text-[#c3c0ff] uppercase">{planDisplay}</span>
+                🎓 Role: Student · <span className={plan === 'basic' ? 'text-amber-300 font-bold uppercase' : 'text-[#c3c0ff] uppercase'}>{plan === 'basic' ? 'Basic (Free) Plan' : planDisplay}</span>
               </>
             )}
           </span>
+          {role !== 'admin' && plan === 'basic' && (
+            <button
+              onClick={onOpenPricing}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#635bff] hover:bg-[#5248e5] text-white text-[10px] font-bold transition-all shadow-xs cursor-pointer ml-1"
+            >
+              <Sparkles className="w-3 h-3 text-amber-300" />
+              <span>Upgrade to Pro</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -199,13 +207,26 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </div>
 
-          {/* Pricing button */}
+          {/* Pricing / Upgrade button */}
           <button
             onClick={onOpenPricing}
-            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-[#ede9fe] text-[#493ee5] hover:bg-[#ddd6fe] transition-colors border border-[#635bff]/15 cursor-pointer"
+            className={`hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors border cursor-pointer ${
+              plan === 'basic'
+                ? 'bg-gradient-to-r from-[#493ee5] to-[#635bff] text-white hover:opacity-95 shadow-xs border-transparent font-bold'
+                : 'bg-[#ede9fe] text-[#493ee5] hover:bg-[#ddd6fe] border-[#635bff]/15'
+            }`}
           >
-            <CreditCard className="w-3.5 h-3.5" />
-            <span>Pricing</span>
+            {plan === 'basic' ? (
+              <>
+                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                <span>Upgrade to Pro</span>
+              </>
+            ) : (
+              <>
+                <CreditCard className="w-3.5 h-3.5" />
+                <span>Pricing Plans</span>
+              </>
+            )}
           </button>
 
           {/* Notification bell */}

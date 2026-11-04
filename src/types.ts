@@ -64,6 +64,7 @@ export interface CompanyPreset {
   defaultSubmissionType?: 'code' | 'pdf_document';
   enterpriseSoftwareTools?: string[];
   tasks?: TaskDeliverable[];
+  advancedTasks?: TaskDeliverable[];
   onboardingBriefing?: string;
 }
 

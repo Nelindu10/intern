@@ -70,6 +70,53 @@ export const COMPANY_PRESETS: CompanyPreset[] = [
           'Submit a Technical Business Specification covering: 1. Chart of Accounts Mapping; 2. Automated Receipt Matching Logic; 3. Month-End Close Reconciliation Rules; 4. Regulatory Audit Trail Requirements.',
       },
     ],
+    advancedTasks: [
+      {
+        action_type: 'generate_task_response',
+        task_id: 'TASK-STR-201',
+        company_name: 'Stripe',
+        task_title: 'Milestone 4: Autonomous Cross-Border Settlement & Real-Time AML Protocol',
+        scenario_description:
+          'Stripe is expanding multi-currency settlement to Southeast Asian and LATAM corridors. Enterprise accounts require sub-second cross-border liquidity rebalancing, automated foreign exchange rate hedging, and real-time Anti-Money Laundering (AML) sanctions screening before settlement release.',
+        required_technology: 'Stripe Global Treasury, Apache Kafka, Snowflake SQL, SWIFT gpi, Lucidchart',
+        tech_stack_or_domain: 'Global Settlement Architecture, AML Sanctions Screening, FX Hedging, Enterprise BRS',
+        simulated_timezone_and_hours: 'UK Shift: 2:00 PM - 10:00 PM IST (Dublin HQ · UTC+1)',
+        manager_instructions:
+          'Congratulations on advancing to Milestone 4! As a Senior BA, you must architect the end-to-end autonomous settlement and AML screening flow. Formulate the exception routing matrix when currency corridors experience liquidity freezes.',
+        expected_deliverable:
+          'Submit a Senior BA Deliverable covering: 1. Autonomous Settlement State Transition Diagram; 2. AML Real-Time Sanctions Screening Decision Table; 3. Multi-Corridor FX Slippage Guardrails; 4. Given-When-Then Acceptance Criteria.',
+      },
+      {
+        action_type: 'generate_task_response',
+        task_id: 'TASK-STR-202',
+        company_name: 'Stripe',
+        task_title: 'Milestone 4: Multi-Tenant Enterprise Ledger Scaling & High-Availability BRS',
+        scenario_description:
+          'Design the functional specifications for Stripe Enterprise Ledger partitioning across multi-region cloud nodes during Black Friday and Cyber Monday peak transaction surges, guaranteeing zero financial ledger desynchronization.',
+        required_technology: 'Stripe Core Ledger, PostgreSQL Partitioning, Redis Enterprise, Datadog, Confluence',
+        tech_stack_or_domain: 'High-Volume Ledger Accounting, Fault Tolerance, Multi-Region Ingestion',
+        simulated_timezone_and_hours: 'UK Shift: 2:00 PM - 10:00 PM IST (Dublin HQ · UTC+1)',
+        manager_instructions:
+          'Ledger integrity during peak bursts is non-negotiable. Specify the data reconciliation protocols between synchronous card authorizations and asynchronous merchant payout settlements.',
+        expected_deliverable:
+          'Submit an Enterprise Architecture BRS covering: 1. Ledger Partitioning Strategy; 2. High-Availability Failover Matrix; 3. Data Integrity Audit Trail; 4. Acceptance Criteria.',
+      },
+      {
+        action_type: 'generate_task_response',
+        task_id: 'TASK-STR-203',
+        company_name: 'Stripe',
+        task_title: 'Milestone 4: Global Tax Compliance Automation & Embedded FinTech API Gateway',
+        scenario_description:
+          'Enterprise platform merchants issuing SaaS subscriptions across 60+ countries must calculate VAT, GST, and US Sales Tax dynamically at checkout while generating localized fiscal invoices.',
+        required_technology: 'Stripe Tax, Avalara AvaTax, GraphQL, Jira Service Management, Postman',
+        tech_stack_or_domain: 'International Tax Compliance, Embedded Finance, API Gateway Specifications',
+        simulated_timezone_and_hours: 'UK Shift: 2:00 PM - 10:00 PM IST (Dublin HQ · UTC+1)',
+        manager_instructions:
+          'Tax rules differ across municipal boundaries. Formulate the functional data schema for dynamic address validation, tax nexus calculation, and automated invoice PDF generation.',
+        expected_deliverable:
+          'Submit a Regulatory Tax Specification covering: 1. Dynamic Tax Calculation API Data Contract; 2. Global Tax Jurisdiction Lookup Rules; 3. Invoicing Compliance Matrix; 4. User Acceptance Criteria.',
+      },
+    ],
   },
   {
     id: 'carecloud-health',
@@ -138,6 +185,53 @@ export const COMPANY_PRESETS: CompanyPreset[] = [
           'Patients need a seamless booking experience that automatically triages urgent symptoms to immediate on-call doctors. Detail the screening questionnaire decision tree and clinical provider availability matrix.',
         expected_deliverable:
           'Submit a Clinical Systems Specification covering: 1. Patient Triage Decision Tree; 2. Provider Booking Capacity Rules; 3. Automated Reminder Communication Matrix; 4. Acceptance Criteria.',
+      },
+    ],
+    advancedTasks: [
+      {
+        action_type: 'generate_task_response',
+        task_id: 'TASK-CCH-301',
+        company_name: 'CareCloud Health',
+        task_title: 'Milestone 4: Real-Time ICU Telemetry Interoperability & Medical Device Gateway',
+        scenario_description:
+          'Hospital intensive care units require bi-directional telemetry data ingestion from bedside patient monitors into Epic EHR and CareCloud PM with sub-second vital alert thresholds and HIPAA encryption.',
+        required_technology: 'Epic EHR, HL7 FHIR v4, MQTT IoT Gateway, Confluence, Microsoft Visio',
+        tech_stack_or_domain: 'Clinical Device Integration, Real-Time Telemetry, Patient Monitoring Architecture',
+        simulated_timezone_and_hours: 'US Eastern Shift: 6:30 PM - 2:30 AM IST (Boston HQ)',
+        manager_instructions:
+          'Milestone 4 elevates your role to Lead Healthcare Systems Analyst. Define the vital threshold alerting hierarchy, medical device security handshake, and clinical staff notification protocols.',
+        expected_deliverable:
+          'Submit a Clinical Telemetry Specification covering: 1. Device Ingestion Architecture Diagram; 2. Vital Threshold Alerting Decision Tree; 3. HIPAA Encryption & Audit Schema; 4. Gherkin Acceptance Criteria.',
+      },
+      {
+        action_type: 'generate_task_response',
+        task_id: 'TASK-CCH-302',
+        company_name: 'CareCloud Health',
+        task_title: 'Milestone 4: Enterprise Clinical Decision Support (CDS) Rule Engine Architecture',
+        scenario_description:
+          'Model automated clinical decision support rules that alert attending physicians of adverse drug-drug interactions and patient allergy contraindications during electronic prescription creation.',
+        required_technology: 'Epic Willow, CareCloud CDS Engine, SNOMED CT, RxNorm, Confluence',
+        tech_stack_or_domain: 'Clinical Decision Support, Drug Interaction Logic, Electronic Prescribing',
+        simulated_timezone_and_hours: 'US Eastern Shift: 6:30 PM - 2:30 AM IST (Boston HQ)',
+        manager_instructions:
+          'Drug safety warnings must be timely without causing alert fatigue. Document the alert severity grading matrix and mandatory physician override justification workflows.',
+        expected_deliverable:
+          'Submit a CDS Systems Specification covering: 1. RxNorm Interaction Decision Logic; 2. Alert Severity Classification Table; 3. Physician Override Audit Log; 4. Acceptance Criteria.',
+      },
+      {
+        action_type: 'generate_task_response',
+        task_id: 'TASK-CCH-303',
+        company_name: 'CareCloud Health',
+        task_title: 'Milestone 4: Cross-State Provider Credentialing & Multi-Hospital System Directory',
+        scenario_description:
+          'Manage multi-state clinician licensing, board certifications, and DEA registrations across integrated healthcare networks with automated primary source verification.',
+        required_technology: 'CareCloud Provider Directory, CAQH ProView, Jira Agile, Microsoft Excel',
+        tech_stack_or_domain: 'Provider Credentialing, Healthcare Compliance, Master Data Management',
+        simulated_timezone_and_hours: 'US Eastern Shift: 6:30 PM - 2:30 AM IST (Boston HQ)',
+        manager_instructions:
+          'Provider licensing lapses carry massive regulatory fines. Detail the automated re-credentialing notification timeline and primary source verification interface.',
+        expected_deliverable:
+          'Submit a Healthcare Operations Specification covering: 1. Credentialing Lifecycle Swimlane Map; 2. Primary Source Verification Rules; 3. Expiration Escalation Matrix; 4. Acceptance Criteria.',
       },
     ],
   },
@@ -210,6 +304,53 @@ export const COMPANY_PRESETS: CompanyPreset[] = [
           'Submit a Vendor Management Specification covering: 1. Vendor Scoring Formulas & Weights; 2. Data Requirements & Joins; 3. Automated Probation Workflow; 4. User Acceptance Criteria.',
       },
     ],
+    advancedTasks: [
+      {
+        action_type: 'generate_task_response',
+        task_id: 'TASK-IFS-401',
+        company_name: 'IFS Enterprise Cloud',
+        task_title: 'Milestone 4: Autonomous Robotic Warehouse & Digital Twin Integration Architecture',
+        scenario_description:
+          'Integrate Automated Guided Vehicles (AGVs) and IoT conveyor systems with IFS Cloud ERP for automated high-density warehouse picking, real-time spatial digital twin simulation, and zero-defect pallet routing.',
+        required_technology: 'IFS Cloud ERP, Siemens Digital Twin, BPMN 2.0, ROS Industrial, Microsoft Power BI',
+        tech_stack_or_domain: 'Industry 4.0, Warehouse Automation, Digital Twin Simulation, Enterprise Architecture',
+        simulated_timezone_and_hours: 'IST Shift: 9:00 AM - 5:30 PM IST (Colombo Hub)',
+        manager_instructions:
+          'Welcome to Milestone 4! Lead the automation integration between industrial robotics and IFS ERP core. Define the pallet routing exception states and real-time sensor telemetry validation rules.',
+        expected_deliverable:
+          'Submit a Smart Manufacturing Deliverable covering: 1. Warehouse Automation Activity Diagram; 2. AGV Fleet Dispatching Decision Rules; 3. Real-Time Telemetry Data Schema; 4. Acceptance Criteria.',
+      },
+      {
+        action_type: 'generate_task_response',
+        task_id: 'TASK-IFS-402',
+        company_name: 'IFS Enterprise Cloud',
+        task_title: 'Milestone 4: Predictive Supply Chain Disruption & AI Route Optimization BRS',
+        scenario_description:
+          'Design functional specifications for predictive global freight disruption forecasting using weather, geopolitical port congestion, and carrier performance signals in IFS Cloud.',
+        required_technology: 'IFS Cloud Logistics, Snowflake, Python ML Services, Jira Agile, Tableau',
+        tech_stack_or_domain: 'Predictive Logistics, Supply Chain Risk Modeling, Dynamic Routing',
+        simulated_timezone_and_hours: 'IST Shift: 9:00 AM - 5:30 PM IST (Colombo Hub)',
+        manager_instructions:
+          'Proactive re-routing saves millions during canal or port disruptions. Specify the dynamic shipment re-allocation hierarchy and automated supplier SLA renegotiation triggers.',
+        expected_deliverable:
+          'Submit a Predictive Logistics Specification covering: 1. Disruption Signal Evaluation Framework; 2. Dynamic Freight Re-routing Rules; 3. Contingency Cost Thresholds; 4. Acceptance Criteria.',
+      },
+      {
+        action_type: 'generate_task_response',
+        task_id: 'TASK-IFS-403',
+        company_name: 'IFS Enterprise Cloud',
+        task_title: 'Milestone 4: Global Carbon Accounting & ESG Regulatory Reporting Module',
+        scenario_description:
+          'Corporate manufacturing enterprises require Scope 1, 2, and 3 greenhouse gas carbon footprint tracking per manufactured unit in IFS Cloud ERP, adhering to EU CSRD standards.',
+        required_technology: 'IFS Cloud Sustainability, Microsoft Power BI, SAP S/4HANA, SQL, Confluence',
+        tech_stack_or_domain: 'ESG Compliance, Carbon Accounting, Sustainability Data Modeling',
+        simulated_timezone_and_hours: 'IST Shift: 9:00 AM - 5:30 PM IST (Colombo Hub)',
+        manager_instructions:
+          'ESG auditing is now mandatory for European enterprise clients. Document the carbon calculation formulas across manufacturing bills of materials and supplier transport legs.',
+        expected_deliverable:
+          'Submit an ESG Sustainability BRS covering: 1. Scope 1-3 Carbon Footprint Calculation Formulas; 2. Bill of Materials Emissions Mapping; 3. CSRD Audit Trail Specification; 4. Acceptance Criteria.',
+      },
+    ],
   },
   {
     id: 'apex-fintech',
@@ -280,6 +421,53 @@ export const COMPANY_PRESETS: CompanyPreset[] = [
           'Submit a Prime Brokerage Specification covering: 1. Margin Deficit Calculation Formula; 2. Collateral Eligibility Rules; 3. Escalation & Liquidation Workflow; 4. Audit Trail Requirements.',
       },
     ],
+    advancedTasks: [
+      {
+        action_type: 'generate_task_response',
+        task_id: 'TASK-AF-501',
+        company_name: 'Apex FinTech Core',
+        task_title: 'Milestone 4: Distributed Settlement Ledger & Instantaneous Delivery vs Payment (DvP)',
+        scenario_description:
+          'Design the functional architecture for instantaneous Delivery versus Payment (DvP Model 1) asset token settlement across participating custodian banks with zero counterparty settlement risk.',
+        required_technology: 'Bloomberg Terminal, FIX Protocol, Solidity/Ethereum Enterprise, SQL, Tableau',
+        tech_stack_or_domain: 'Capital Markets, Delivery vs Payment, Tokenized Securities, Institutional Custody',
+        simulated_timezone_and_hours: 'UK Shift: 2:00 PM - 10:00 PM IST (London HQ · GMT)',
+        manager_instructions:
+          'Milestone 4 advances you to Senior Operations Analyst. Formulate the atomic DvP asset exchange rules and multi-custodian liquidity lock protocols.',
+        expected_deliverable:
+          'Submit a DvP Systems Architecture Deliverable covering: 1. Atomic Settlement Swimlane Diagram; 2. Custodian Liquidity Lock State Machine; 3. Failure Rollback Protocol; 4. Acceptance Criteria.',
+      },
+      {
+        action_type: 'generate_task_response',
+        task_id: 'TASK-AF-502',
+        company_name: 'Apex FinTech Core',
+        task_title: 'Milestone 4: Algorithmic Market-Making Surveillance & Spoofing Detection Engine',
+        scenario_description:
+          'Formulate regulatory compliance business rules to monitor high-frequency limit order books for illegal layering, spoofing, and wash trading patterns under SEC and FCA trade surveillance standards.',
+        required_technology: 'Kx kdb+/q, Bloomberg Terminal, SQL, Python Analytics, Jira Agile',
+        tech_stack_or_domain: 'Market Surveillance, Algorithmic Trading Rules, Trade Compliance',
+        simulated_timezone_and_hours: 'UK Shift: 2:00 PM - 10:00 PM IST (London HQ · GMT)',
+        manager_instructions:
+          'Market manipulation surveillance requires microsecond order book pattern matching. Detail the spoofing cancellation velocity ratio and trader intent alert scoring model.',
+        expected_deliverable:
+          'Submit a Market Surveillance BRS covering: 1. Order-to-Trade Ratio (OTR) Threshold Formulas; 2. Spoofing Pattern Detection Algorithm; 3. Regulatory Suspicious Activity Report (SAR) Matrix; 4. Acceptance Criteria.',
+      },
+      {
+        action_type: 'generate_task_response',
+        task_id: 'TASK-AF-503',
+        company_name: 'Apex FinTech Core',
+        task_title: 'Milestone 4: Multi-Asset Liquidity Pooling & Automated Rehypothecation Pipeline',
+        scenario_description:
+          'Institutional prime broker clients pledge diverse collateral (treasuries, corporate bonds, equities). Model the optimal collateral optimization algorithm for repo market rehypothecation.',
+        required_technology: 'Apex Custody Engine, SQL, Confluence, Microsoft Excel, Tableau',
+        tech_stack_or_domain: 'Collateral Optimization, Securities Lending, Repo Financing',
+        simulated_timezone_and_hours: 'UK Shift: 2:00 PM - 10:00 PM IST (London HQ · GMT)',
+        manager_instructions:
+          'Collateral efficiency generates significant yield. Formulate the haircut valuation formulas and automated collateral substitution workflows.',
+        expected_deliverable:
+          'Submit a Prime Brokerage Collateral Spec covering: 1. Dynamic Collateral Haircut Table; 2. Rehypothecation Eligibility Decision Tree; 3. Intra-Day Margin Recall Rules; 4. Acceptance Criteria.',
+      },
+    ],
   },
   {
     id: 'neoscale-ai',
@@ -348,6 +536,53 @@ export const COMPANY_PRESETS: CompanyPreset[] = [
           'Security compliance is our biggest enterprise sales gating item. Specify the permission matrix for Org Admin, Prompt Engineer, and Auditor roles with SAML integration rules.',
         expected_deliverable:
           'Submit a Security Architecture Specification covering: 1. RBAC Permission Matrix; 2. SAML 2.0 / SCIM Provisioning Workflow; 3. Tenant Data Isolation Guarantees; 4. Acceptance Criteria.',
+      },
+    ],
+    advancedTasks: [
+      {
+        action_type: 'generate_task_response',
+        task_id: 'TASK-NS-601',
+        company_name: 'NeoScale AI Labs',
+        task_title: 'Milestone 4: Autonomous Agent Orchestration & Multi-Model Inference Routing Matrix',
+        scenario_description:
+          'Enterprise multi-agent architectures require intelligent routing between high-reasoning frontier models and ultra-fast lightweight models based on query complexity, latency budgets, and cost quotas.',
+        required_technology: 'Jira Product Discovery, Figma, Postman, OpenTelemetry, Notion Enterprise',
+        tech_stack_or_domain: 'Agentic Workflows, Multi-Model Routing, Inference Optimization, Latency SLAs',
+        simulated_timezone_and_hours: 'PST Shift: 9:30 PM - 5:30 AM IST (San Francisco HQ)',
+        manager_instructions:
+          'Welcome to Milestone 4! You are leading AI Agent Systems Strategy. Formulate the cost vs latency threshold matrix and fallback retry protocols when upstream models experience throttling.',
+        expected_deliverable:
+          'Submit an AI Architecture Deliverable covering: 1. Query Complexity Classification Rules; 2. Multi-Model Inference Decision Tree; 3. Circuit Breaker Fallback Logic; 4. Acceptance Criteria.',
+      },
+      {
+        action_type: 'generate_task_response',
+        task_id: 'TASK-NS-602',
+        company_name: 'NeoScale AI Labs',
+        task_title: 'Milestone 4: Zero-Trust Enterprise Knowledge Base Ingestion & Fine-Grained RAG ACLs',
+        scenario_description:
+          'Enterprise RAG systems indexing confidential corporate documents must enforce document-level and chunk-level Access Control Lists (ACLs) so standard employees never retrieve executive salary or board data.',
+        required_technology: 'Pinecone Vector DB, Okta Enterprise, Jira Enterprise, Confluence, Postman',
+        tech_stack_or_domain: 'Vector Database Security, RAG Access Control, Zero-Trust Data Governance',
+        simulated_timezone_and_hours: 'PST Shift: 9:30 PM - 5:30 AM IST (San Francisco HQ)',
+        manager_instructions:
+          'Data leakage inside vector embeddings destroys client confidence. Define the metadata security filtering specification injected at embedding query time.',
+        expected_deliverable:
+          'Submit a RAG Security Specification covering: 1. Vector Chunk Metadata Filtering Schema; 2. Okta User Role Ingestion Mapping; 3. Document Redaction Safeguards; 4. Acceptance Criteria.',
+      },
+      {
+        action_type: 'generate_task_response',
+        task_id: 'TASK-NS-603',
+        company_name: 'NeoScale AI Labs',
+        task_title: 'Milestone 4: Continuous RLHF Feedback Pipeline & Automated Drift Remediation BRS',
+        scenario_description:
+          'Design the human-in-the-loop telemetry collection pipeline that captures user feedback (thumbs up/down, edit corrections, prompt retries) to trigger automated fine-tuning dataset curation and model drift alerting.',
+        required_technology: 'Mixpanel, Postman, Grafana, Notion Enterprise, Datadog',
+        tech_stack_or_domain: 'RLHF Feedback Loops, Model Monitoring, Data Curation Pipelines',
+        simulated_timezone_and_hours: 'PST Shift: 9:30 PM - 5:30 AM IST (San Francisco HQ)',
+        manager_instructions:
+          'Continuous evaluation keeps models grounded over time. Formulate the data filtering rules that isolate high-value user corrections from low-signal feedback.',
+        expected_deliverable:
+          'Submit an ML Operations Specification covering: 1. User Feedback Ingestion Schema; 2. Data Curation Quality Filters; 3. Model Drift Detection Thresholds; 4. Acceptance Criteria.',
       },
     ],
   },

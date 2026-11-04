@@ -149,7 +149,10 @@ export default function App() {
   };
 
   const handleApplyPromoSuccess = (code: string) => {
-    setUnlockedPlan(`Unlocked: ${code} Institutional Premium`);
+    setUnlockedPlan(`Unlocked: ${code} (Pro Plan)`);
+    localStorage.setItem('selectedPlan', 'pro');
+    setCurrentUser((prev) => (prev ? { ...prev, plan: 'pro' } : null));
+    window.dispatchEvent(new Event('storage'));
   };
 
   // -------------------------------------------------------------------------

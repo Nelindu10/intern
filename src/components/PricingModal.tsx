@@ -17,6 +17,8 @@ interface PricingModalProps {
   onApplyPromoSuccess: (code: string) => void;
 }
 
+const VALID_PROMO_CODES = ['NIBM-VIP', 'PRO-ACCESS', 'BETA-TESTER', 'VIP-PASS', 'FRIEND-CODE', 'NIBM-BATCH26'];
+
 export const PricingModal: React.FC<PricingModalProps> = ({
   isOpen,
   onClose,
@@ -32,12 +34,13 @@ export const PricingModal: React.FC<PricingModalProps> = ({
 
   const handleApplyPromo = () => {
     const clean = promoCode.trim().toUpperCase();
-    if (clean === 'NIBM-BATCH26' || clean === 'STANFORD-SPRING25' || clean.startsWith('NIBM')) {
+    if (VALID_PROMO_CODES.includes(clean)) {
       setPromoStatus('success');
+      localStorage.setItem('selectedPlan', 'pro');
       setTimeout(() => {
         onApplyPromoSuccess(clean);
         onClose();
-      }, 1200);
+      }, 1000);
     } else {
       setPromoStatus('invalid');
     }
@@ -275,14 +278,14 @@ export const PricingModal: React.FC<PricingModalProps> = ({
             <div className="p-4 rounded-2xl bg-[#f2f3ff] border border-[#635bff]/25 mt-4">
               <div className="flex items-center gap-2 text-xs font-bold text-[#0f172a] mb-2">
                 <KeyRound className="w-4 h-4 text-[#635bff]" />
-                <span>Enter Student Promo Code (e.g., NIBM-BATCH26)</span>
+                <span>Enter Beta Tester Promo Code (Unlock Pro Plan)</span>
               </div>
               <div className="flex items-center gap-2">
                 <input
                   type="text"
                   value={promoCode}
                   onChange={(e) => setPromoCode(e.target.value)}
-                  placeholder="e.g. NIBM-BATCH26 or STANFORD-SPRING25"
+                  placeholder="e.g. NIBM-VIP, PRO-ACCESS, BETA-TESTER"
                   className="flex-1 text-xs p-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:border-[#635bff] uppercase font-mono"
                 />
                 <button
@@ -296,12 +299,12 @@ export const PricingModal: React.FC<PricingModalProps> = ({
               {promoStatus === 'success' && (
                 <div className="mt-2 text-xs text-emerald-700 font-semibold flex items-center gap-1.5 animate-in fade-in">
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>Promo code applied! NIBM Institutional Premium Capacity unlocked.</span>
+                  <span>Promo code applied! Pro Plan access successfully unlocked.</span>
                 </div>
               )}
               {promoStatus === 'invalid' && (
                 <div className="mt-2 text-xs text-red-600 font-medium">
-                  Invalid code. Please try "NIBM-BATCH26" or "STANFORD-SPRING25".
+                  Invalid code. Try "NIBM-VIP", "PRO-ACCESS", "BETA-TESTER", "VIP-PASS", or "FRIEND-CODE".
                 </div>
               )}
 

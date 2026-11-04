@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import confetti from 'canvas-confetti';
 import {
   Building2,
   Sparkles,
@@ -31,6 +32,10 @@ import {
   Layers,
   Wrench,
   HelpCircle,
+  Trophy,
+  ChevronRight,
+  KeyRound,
+  Tag,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -50,6 +55,7 @@ import {
   SearchAndGenerateResponse,
 } from '../types';
 import { COMPANY_PRESETS, SAMPLE_BA_PDF_REPORT } from '../data/presets';
+import { VALID_PROMO_CODES } from './Login';
 
 interface SimulationWorkspaceProps {
   currentTask: TaskDeliverable;
@@ -84,6 +90,8 @@ interface ProgressRecord {
 }
 
 const STORAGE_SCORES_KEY = 'SIMULATEHUB_STUDENT_EVALUATION_SCORES';
+const STORAGE_COMPLETED_TASKS_KEY = 'SIMULATEHUB_COMPLETED_TASKS';
+const STORAGE_COMPANY_LEVELS_KEY = 'SIMULATEHUB_COMPANY_LEVELS';
 
 // Anti-Gibberish validation rule:
 // If the text is blank, less than 20 words, or contains repetitive gibberish (e.g., 'efefef'),
@@ -181,6 +189,7 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
 
   const allowedCompanyCount = activePlan === 'basic' ? 2 : activePlan === 'pro' ? 4 : COMPANY_PRESETS.length;
   const isPremium = activePlan === 'premium';
+  const isBasic = activePlan === 'basic';
 
   // Tooltip & Locked Alert/Toast Notification States
   const [isSearchHovered, setIsSearchHovered] = useState(false);
@@ -191,11 +200,17 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
     message: string;
   } | null>(null);
 
+  // Fast inline promo code in toast
+  const [inlinePromoCode, setInlinePromoCode] = useState('');
+  const [inlinePromoSuccess, setInlinePromoSuccess] = useState(false);
+
   useEffect(() => {
     if (!lockedToast) return;
     const timer = setTimeout(() => {
       setLockedToast(null);
-    }, 4500);
+      setInlinePromoSuccess(false);
+      setInlinePromoCode('');
+    }, 6000);
     return () => clearTimeout(timer);
   }, [lockedToast]);
 
@@ -205,8 +220,26 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
       open: true,
       companyName: company.name,
       requiredTier,
-      message: 'Unlock this company by upgrading your plan!',
+      message: 'Unlock this company by upgrading your plan or using a promo code!',
     });
+  };
+
+  const handleApplyInlinePromo = (e: React.FormEvent) => {
+    e.preventDefault();
+    const clean = inlinePromoCode.trim().toUpperCase();
+    if (VALID_PROMO_CODES.includes(clean)) {
+      localStorage.setItem('selectedPlan', 'pro');
+      setActivePlan('pro');
+      setInlinePromoSuccess(true);
+      window.dispatchEvent(new Event('storage'));
+      setTimeout(() => {
+        setLockedToast(null);
+        setInlinePromoSuccess(false);
+        setInlinePromoCode('');
+      }, 1500);
+    } else {
+      alert('Invalid promo code. Valid beta codes: NIBM-VIP, PRO-ACCESS, BETA-TESTER, VIP-PASS, FRIEND-CODE.');
+    }
   };
 
   // Search bar for custom company discovery
@@ -214,30 +247,69 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
   const [isSearchingCompany, setIsSearchingCompany] = useState(false);
 
   // ---------------------------------------------------------------------------
-  // DYNAMIC COMPANY-SPECIFIC TASKS & SELECTION
+  // 5. AUTOMATED MILESTONE PROGRESSION & COMPLETED TASK TRACKING
   // ---------------------------------------------------------------------------
+  // Stores IDs of tasks completed/passed by the student
+  const [completedTaskIds, setCompletedTaskIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_COMPLETED_TASKS_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {
+      // ignore
+    }
+    return [];
+  });
+
+  // Stores milestone progression level per company (Level 1 = Core, Level 2 = Milestone 4 Advanced)
+  const [companyLevels, setCompanyLevels] = useState<Record<string, number>>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_COMPANY_LEVELS_KEY);
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e) {
+      // ignore
+    }
+    return {};
+  });
+
+  const currentCompanyLevel = companyLevels[selectedCompany.id] || 1;
+  const [nextLevelModalOpen, setNextLevelModalOpen] = useState(false);
+
+  // Available tasks: If Level >= 2, unlock Milestone 4 advanced tasks!
+  const coreTasks = selectedCompany.tasks || [];
+  const advancedTasks = selectedCompany.advancedTasks || [];
+
   const availableCompanyTasks: TaskDeliverable[] =
-    selectedCompany.tasks && selectedCompany.tasks.length > 0
-      ? selectedCompany.tasks
+    currentCompanyLevel >= 2 && advancedTasks.length > 0
+      ? [...coreTasks, ...advancedTasks]
+      : coreTasks.length > 0
+      ? coreTasks
       : [currentTask];
 
   const [selectedTaskId, setSelectedTaskId] = useState<string>(() => {
     return currentTask?.task_id || availableCompanyTasks[0]?.task_id || 'TASK-STR-101';
   });
 
-  // When selectedCompany changes, sync selectedTaskId to the first company task
+  // When selectedCompany changes, sync selectedTaskId to an appropriate task
   useEffect(() => {
-    if (selectedCompany.tasks && selectedCompany.tasks.length > 0) {
-      const match = selectedCompany.tasks.find((t) => t.task_id === selectedTaskId);
-      if (!match) {
-        const first = selectedCompany.tasks[0];
-        setSelectedTaskId(first.task_id);
-        onTaskUpdated(first, selectedCompany);
-      }
-    } else {
-      setSelectedTaskId(currentTask.task_id);
+    const tasksForComp =
+      (companyLevels[selectedCompany.id] || 1) >= 2 && selectedCompany.advancedTasks && selectedCompany.advancedTasks.length > 0
+        ? [...(selectedCompany.tasks || []), ...selectedCompany.advancedTasks]
+        : selectedCompany.tasks && selectedCompany.tasks.length > 0
+        ? selectedCompany.tasks
+        : [currentTask];
+
+    const match = tasksForComp.find((t) => t.task_id === selectedTaskId);
+    if (!match && tasksForComp.length > 0) {
+      const first = tasksForComp[0];
+      setSelectedTaskId(first.task_id);
+      onTaskUpdated(first, selectedCompany);
     }
-  }, [selectedCompany]);
+  }, [selectedCompany, companyLevels]);
 
   // Compute active selected task object
   const activeSelectedTask: TaskDeliverable =
@@ -250,6 +322,43 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
     const matched = availableCompanyTasks.find((t) => t.task_id === newTaskId);
     if (matched) {
       onTaskUpdated(matched, selectedCompany);
+    }
+  };
+
+  // Check if all 3 core tasks are passed
+  const coreTaskIds = coreTasks.map((t) => t.task_id);
+  const completedCoreCount = coreTaskIds.filter((id) => completedTaskIds.includes(id)).length;
+  const isAllCoreTasksCompleted = coreTaskIds.length > 0 && completedCoreCount >= coreTaskIds.length;
+
+  // Handler for Proceed to Next Level
+  const handleProceedToNextLevel = () => {
+    const updated = { ...companyLevels, [selectedCompany.id]: 2 };
+    setCompanyLevels(updated);
+    try {
+      localStorage.setItem(STORAGE_COMPANY_LEVELS_KEY, JSON.stringify(updated));
+    } catch (e) {
+      // ignore
+    }
+
+    setNextLevelModalOpen(false);
+
+    // Fire celebration confetti!
+    try {
+      confetti({
+        particleCount: 110,
+        spread: 90,
+        origin: { y: 0.6 },
+        colors: ['#635bff', '#8b5cf6', '#10b981', '#f59e0b'],
+      });
+    } catch (e) {
+      // ignore
+    }
+
+    // Switch selected task to the first newly unlocked Milestone 4 task
+    if (selectedCompany.advancedTasks && selectedCompany.advancedTasks.length > 0) {
+      const firstAdv = selectedCompany.advancedTasks[0];
+      setSelectedTaskId(firstAdv.task_id);
+      onTaskUpdated(firstAdv, selectedCompany);
     }
   };
 
@@ -382,8 +491,16 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
   // Preset company selection
   const handleSelectPreset = async (company: CompanyPreset) => {
     setSelectedCompany(company);
-    if (company.tasks && company.tasks.length > 0) {
-      const firstTask = company.tasks[0];
+    const compLvl = companyLevels[company.id] || 1;
+    const tasksForComp =
+      compLvl >= 2 && company.advancedTasks && company.advancedTasks.length > 0
+        ? [...(company.tasks || []), ...company.advancedTasks]
+        : company.tasks && company.tasks.length > 0
+        ? company.tasks
+        : [];
+
+    if (tasksForComp.length > 0) {
+      const firstTask = tasksForComp[0];
       setSelectedTaskId(firstTask.task_id);
       onTaskUpdated(firstTask, company);
       return;
@@ -489,7 +606,7 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
   };
 
   // ---------------------------------------------------------------------------
-  // AI EVALUATION WITH ANTI-GIBBERISH RULE & PURE RAW JSON PARSING
+  // AI EVALUATION WITH ANTI-GIBBERISH RULE, AUTOMATED MILESTONE PROGRESSION & JSON
   // ---------------------------------------------------------------------------
   const handleSubmitEvaluation = async () => {
     setIsEvaluating(true);
@@ -677,6 +794,32 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
         });
       }
 
+      // -----------------------------------------------------------------------
+      // 5. AUTOMATED MILESTONE PROGRESSION TRIGGER:
+      // If student passes task (score >= 60), mark it completed.
+      // If all 3 core tasks for the company are completed, trigger "Proceed to Next Level"!
+      // -----------------------------------------------------------------------
+      if (evalData.overall_score >= 60) {
+        const newlyCompleted = Array.from(new Set([...completedTaskIds, activeSelectedTask.task_id]));
+        setCompletedTaskIds(newlyCompleted);
+        try {
+          localStorage.setItem(STORAGE_COMPLETED_TASKS_KEY, JSON.stringify(newlyCompleted));
+        } catch (e) {
+          // ignore
+        }
+
+        const compCoreIds = (selectedCompany.tasks || []).map((t) => t.task_id);
+        const allDone = compCoreIds.length > 0 && compCoreIds.every((id) => newlyCompleted.includes(id));
+        const currentLvl = companyLevels[selectedCompany.id] || 1;
+
+        if (allDone && currentLvl === 1) {
+          // Trigger Proceed to Next Level popup!
+          setTimeout(() => {
+            setNextLevelModalOpen(true);
+          }, 800);
+        }
+      }
+
       onEvaluationCompleted(evalData, 30, fullContentToEvaluate, submissionType);
     } catch (err: any) {
       console.error('AI Evaluation error:', err);
@@ -695,14 +838,6 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
     setTimeout(() => setCopiedFeedback(false), 2000);
   };
 
-  // Average score calculation for real progress chart summary
-  const averageOverallScore =
-    progressScores.length > 0
-      ? Math.round(
-          progressScores.reduce((acc, curr) => acc + curr.overallScore, 0) / progressScores.length
-        )
-      : null;
-
   return (
     <div className="space-y-4 max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 text-[#131b2e] relative">
       {/* Hidden file input */}
@@ -714,14 +849,14 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
         className="hidden"
       />
 
-      {/* Plan Restriction Toast */}
+      {/* Plan Restriction Toast with Fast Inline Promo Code Redemption */}
       {lockedToast && (
         <div className="fixed top-20 right-4 sm:right-8 z-50 max-w-sm sm:max-w-md w-full animate-in slide-in-from-top-3 fade-in duration-200">
           <div className="bg-white/95 backdrop-blur-md rounded-2xl p-4 border-2 border-[#635bff]/30 shadow-2xl shadow-[#635bff]/20 ring-4 ring-[#635bff]/10 flex items-start gap-3.5 relative">
             <div className="w-10 h-10 rounded-xl bg-[#ede9fe] text-[#493ee5] flex items-center justify-center shrink-0 border border-[#635bff]/20 shadow-xs">
               <Lock className="w-5 h-5 text-[#635bff]" />
             </div>
-            <div className="flex-1 pr-6 space-y-1">
+            <div className="flex-1 pr-6 space-y-2">
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-[#493ee5] bg-[#ede9fe] px-2 py-0.5 rounded-full border border-[#635bff]/20">
                   Plan Restriction · {activePlan.toUpperCase()} TIER
@@ -731,13 +866,37 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
                 </span>
               </div>
               <h4 className="text-sm font-bold text-[#0f172a] leading-tight">
-                Unlock this company by upgrading your plan!
+                Unlock {lockedToast.companyName} by upgrading your plan!
               </h4>
               <p className="text-xs text-slate-600 leading-normal">
-                {lockedToast.message ||
-                  `Access to ${lockedToast.companyName} is restricted under your ${activePlan} plan.`}
+                {lockedToast.message}
               </p>
-              <div className="pt-2 flex items-center gap-2">
+
+              {/* Quick Promo Code bypass */}
+              <form onSubmit={handleApplyInlinePromo} className="pt-1 flex items-center gap-1.5">
+                <input
+                  type="text"
+                  value={inlinePromoCode}
+                  onChange={(e) => setInlinePromoCode(e.target.value)}
+                  placeholder="Enter promo code (e.g. NIBM-VIP)"
+                  className="flex-1 text-[11px] px-2.5 py-1.5 rounded-lg border border-slate-300 focus:outline-none focus:border-[#635bff] uppercase font-mono bg-slate-50"
+                />
+                <button
+                  type="submit"
+                  className="px-2.5 py-1.5 rounded-lg bg-[#493ee5] hover:bg-[#3e34c9] text-white text-[11px] font-bold transition-all shadow-xs shrink-0 cursor-pointer"
+                >
+                  Apply
+                </button>
+              </form>
+
+              {inlinePromoSuccess && (
+                <div className="text-[11px] text-emerald-700 font-bold flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Pro Plan unlocked! Accessing company...</span>
+                </div>
+              )}
+
+              <div className="pt-1 flex items-center gap-2">
                 {onOpenUpgrade && (
                   <button
                     type="button"
@@ -768,6 +927,74 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
             >
               <X className="w-4 h-4" />
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* 5. AUTOMATED MILESTONE PROGRESSION CELEBRATION MODAL */}
+      {nextLevelModalOpen && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl max-w-xl w-full border-2 border-[#635bff]/40 shadow-2xl overflow-hidden relative text-[#131b2e] my-auto">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-[#493ee5] via-[#635bff] to-[#8b5cf6] text-white p-6 relative">
+              <div className="w-12 h-12 rounded-2xl bg-white/20 text-amber-300 flex items-center justify-center mb-3 shadow-inner">
+                <Trophy className="w-7 h-7" />
+              </div>
+              <div className="text-xs font-semibold uppercase tracking-wider text-[#e2dfff] flex items-center gap-1.5">
+                <Sparkles className="w-4 h-4 text-amber-300" />
+                <span>Milestone 3 Accomplished · Promotion Unlocked</span>
+              </div>
+              <h2 className="text-2xl font-bold font-display mt-1">
+                You Mastered All 3 Core Tasks for {selectedCompany.name}!
+              </h2>
+              <p className="text-xs text-white/85 mt-1 leading-relaxed">
+                You have satisfied problem scope decomposition, business logic modeling, and enterprise deliverable documentation across all 3 sprint milestones.
+              </p>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 space-y-4">
+              <div className="p-4 rounded-2xl bg-[#faf8ff] border border-[#635bff]/25 space-y-2">
+                <div className="flex items-center justify-between text-xs font-bold text-[#493ee5] uppercase tracking-wider">
+                  <span>Advancement: Milestone 4 (Senior BA Track)</span>
+                  <span className="bg-emerald-100 text-emerald-800 text-[10px] px-2 py-0.5 rounded-full font-bold">
+                    3 New Tasks Ready
+                  </span>
+                </div>
+                <p className="text-xs text-slate-700 leading-relaxed">
+                  Proceeding to the next level unlocks <strong>Milestone 4</strong>: High-complexity enterprise architecture specifications, multi-currency settlement protocols, and mission-critical systems integration.
+                </p>
+                <div className="pt-2 border-t border-slate-200/60 space-y-1">
+                  {(selectedCompany.advancedTasks || []).map((adv, idx) => (
+                    <div key={idx} className="flex items-center gap-2 text-xs text-slate-700">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#635bff]"></span>
+                      <strong className="font-mono text-[11px] text-[#493ee5]">[{adv.task_id}]</strong>
+                      <span className="truncate">{adv.task_title}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="pt-2 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setNextLevelModalOpen(false)}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  Stay on Current Milestone
+                </button>
+                <button
+                  type="button"
+                  onClick={handleProceedToNextLevel}
+                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#493ee5] to-[#635bff] hover:from-[#3e34c9] hover:to-[#5248e5] text-white text-xs font-bold shadow-md shadow-[#635bff]/25 transition-all flex items-center gap-2 cursor-pointer"
+                >
+                  <Trophy className="w-4 h-4 text-amber-300" />
+                  <span>Proceed to Next Level (Unlock Milestone 4)</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -935,6 +1162,35 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
         </div>
       )}
 
+      {/* 3. DEFAULT BASIC PLAN RESTRICTION BANNER */}
+      {isBasic && (
+        <div className="bg-gradient-to-r from-amber-50 via-amber-50/80 to-[#faf8ff] border border-amber-200/90 rounded-2xl px-4 py-3 flex flex-wrap items-center justify-between text-xs gap-3 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
+            <div>
+              <span className="font-bold text-amber-900 uppercase tracking-wider text-[11px] mr-2">
+                Basic (Free) Plan Active
+              </span>
+              <span className="text-slate-600">
+                You have access to 2 of 5 employers (Stripe & CareCloud). Upgrade or enter a beta promo code to unlock all employers.
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {onOpenUpgrade && (
+              <button
+                type="button"
+                onClick={onOpenUpgrade}
+                className="px-3.5 py-1.5 rounded-xl bg-[#635bff] hover:bg-[#5248e5] text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                <span>Upgrade to Pro / Enter Promo Code</span>
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Active Simulation Session Sub-Bar */}
       <div className="bg-[#ede9fe]/50 border border-[#635bff]/20 rounded-xl px-4 py-2 flex flex-wrap items-center justify-between text-xs gap-3">
         <div className="flex items-center gap-3 flex-wrap">
@@ -951,7 +1207,11 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
           <span className="text-slate-300">/</span>
           <div className="flex items-center gap-1.5">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Tier:</span>
-            <span className="px-2 py-0.5 rounded-full bg-white text-[#493ee5] font-bold text-[10px] uppercase border border-[#635bff]/20 flex items-center gap-1 shadow-xs">
+            <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] uppercase border flex items-center gap-1 shadow-xs ${
+              isBasic
+                ? 'bg-amber-50 text-amber-800 border-amber-300'
+                : 'bg-white text-[#493ee5] border-[#635bff]/20'
+            }`}>
               {activePlan !== 'premium' && <Lock className="w-2.5 h-2.5 text-slate-400" />}
               {activePlan} ({allowedCompanyCount}/{COMPANY_PRESETS.length} Employers)
             </span>
@@ -970,7 +1230,7 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
         <div className="flex items-center gap-4 text-[11px] font-mono text-slate-600">
           <span className="flex items-center gap-1">
             <Cpu className="w-3.5 h-3.5 text-slate-500" />
-            Simulated Sandbox Ready
+            Milestone Level: {currentCompanyLevel === 2 ? 'Level 2 (Milestone 4)' : 'Level 1 (Core BA)'}
           </span>
           <span className="flex items-center gap-1 text-emerald-700 font-semibold">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
@@ -1216,7 +1476,7 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
             <div className="flex items-center justify-between text-xs pt-1 border-t border-white/15">
               <span className="text-[11px] text-white/80">Next Handover Sync: 18:00 Local</span>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/20 text-white">
-                Active Sprint
+                {currentCompanyLevel === 2 ? 'Milestone 4 (Senior)' : 'Milestone 3 (Core)'}
               </span>
             </div>
           </div>
@@ -1455,7 +1715,7 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
 
           {/* ----------------------------------------------------------------- */}
           {/* UNIFIED SINGLE "TASK SUBMISSION" CONTAINER                        */}
-          {/* Featuring Task Selection Dropdown, PDF attachment & Submit button */}
+          {/* Featuring Milestone Progression & Task Selection Dropdown         */}
           {/* ----------------------------------------------------------------- */}
           <div className="bg-white rounded-2xl p-5 border-2 border-[#635bff]/25 shadow-sm space-y-4 relative overflow-hidden">
             {/* Top highlight bar */}
@@ -1487,16 +1747,52 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
               </div>
             </div>
 
+            {/* 5. MILESTONE PROGRESSION NOTIFICATION & UNLOCK BANNER */}
+            {isAllCoreTasksCompleted && currentCompanyLevel === 1 && (
+              <div className="p-3.5 rounded-xl bg-gradient-to-r from-[#ede9fe] to-[#faf8ff] border-2 border-[#635bff]/40 flex flex-wrap items-center justify-between gap-3 shadow-xs animate-in fade-in">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-[#635bff] text-white flex items-center justify-center shrink-0">
+                    <Trophy className="w-4 h-4 text-amber-300" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-[#0f172a]">
+                      All 3 Core Tasks Completed for {selectedCompany.name}!
+                    </h4>
+                    <p className="text-[11px] text-slate-600">
+                      You are eligible to advance to Level 2 (Milestone 4: Senior Architecture & BRS).
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleProceedToNextLevel}
+                  className="px-4 py-2 rounded-xl bg-[#635bff] hover:bg-[#5248e5] text-white text-xs font-bold transition-all shadow-md shadow-[#635bff]/25 flex items-center gap-1.5 cursor-pointer shrink-0"
+                >
+                  <span>Proceed to Next Level</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
             {/* TASK SELECTION DROPDOWN: Lists current active tasks for that company */}
             <div className="space-y-2 bg-[#faf8ff] p-3.5 rounded-xl border border-[#635bff]/20">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between flex-wrap gap-2">
                 <label htmlFor="task-select" className="text-xs font-bold text-[#493ee5] uppercase tracking-wider flex items-center gap-1.5">
                   <Layers className="w-3.5 h-3.5 text-[#635bff]" />
-                  <span>Active Milestone / Task Selection:</span>
+                  <span>
+                    {currentCompanyLevel >= 2 ? 'Milestone 4 (Senior BA Level Active):' : 'Active Milestone / Task Selection:'}
+                  </span>
                 </label>
-                <span className="text-[10px] font-semibold text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">
-                  {availableCompanyTasks.length} {selectedCompany.name} Tasks Available
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-semibold text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">
+                    {completedCoreCount}/3 Core Tasks Completed
+                  </span>
+                  {currentCompanyLevel >= 2 && (
+                    <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-200">
+                      Level 2 Active
+                    </span>
+                  )}
+                </div>
               </div>
 
               <select
@@ -1505,11 +1801,30 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
                 onChange={(e) => handleTaskSelectChange(e.target.value)}
                 className="w-full text-xs font-semibold p-2.5 rounded-lg border border-slate-300 bg-white text-slate-800 focus:outline-none focus:border-[#635bff] focus:ring-2 focus:ring-[#635bff]/20 cursor-pointer shadow-xs transition-all"
               >
-                {availableCompanyTasks.map((t) => (
-                  <option key={t.task_id} value={t.task_id}>
-                    [{t.task_id}] {t.task_title}
-                  </option>
-                ))}
+                {currentCompanyLevel >= 2 && advancedTasks.length > 0 ? (
+                  <>
+                    <optgroup label="🌟 Milestone 4: Advanced Senior BA Tasks (Active)">
+                      {advancedTasks.map((t) => (
+                        <option key={t.task_id} value={t.task_id}>
+                          {completedTaskIds.includes(t.task_id) ? '✓ ' : ''}[{t.task_id}] {t.task_title}
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="✓ Milestone 3: Core BA Tasks (Completed)">
+                      {coreTasks.map((t) => (
+                        <option key={t.task_id} value={t.task_id}>
+                          {completedTaskIds.includes(t.task_id) ? '✓ ' : ''}[{t.task_id}] {t.task_title}
+                        </option>
+                      ))}
+                    </optgroup>
+                  </>
+                ) : (
+                  coreTasks.map((t) => (
+                    <option key={t.task_id} value={t.task_id}>
+                      {completedTaskIds.includes(t.task_id) ? '✓ Passed · ' : ''}[{t.task_id}] {t.task_title}
+                    </option>
+                  ))
+                )}
               </select>
 
               {/* Selected Task Details Summary Card */}
