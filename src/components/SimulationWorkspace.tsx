@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Building2,
   Sparkles,
-  Play,
   CheckCircle2,
   Clock,
   RefreshCw,
@@ -12,13 +11,11 @@ import {
   CheckSquare,
   Square,
   Download,
-  Terminal,
   Cpu,
   Globe2,
   FileText,
   AlertCircle,
   Copy,
-  Code2,
   Lock,
   ArrowRight,
   X,
@@ -29,8 +26,19 @@ import {
   FileCheck2,
   Paperclip,
   Trash2,
-  ExternalLink,
+  BarChart3,
+  TrendingUp,
 } from 'lucide-react';
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  CartesianGrid,
+} from 'recharts';
 import {
   TaskDeliverable,
   CompanyPreset,
@@ -38,7 +46,7 @@ import {
   GenerateTaskResponse,
   SearchAndGenerateResponse,
 } from '../types';
-import { COMPANY_PRESETS, CODE_WORKSPACE_FILES, SAMPLE_BA_PDF_REPORT } from '../data/presets';
+import { COMPANY_PRESETS, SAMPLE_BA_PDF_REPORT } from '../data/presets';
 
 interface SimulationWorkspaceProps {
   currentTask: TaskDeliverable;
@@ -61,6 +69,47 @@ export interface AttachedPdf {
   sizeFormatted: string;
   content: string;
   rawFile?: File;
+}
+
+interface ProgressRecord {
+  taskName: string;
+  shortName: string;
+  overallScore: number;
+  analyticalScore: number;
+  communicationScore: number;
+}
+
+// Anti-Gibberish validation rule:
+// If the text is blank, less than 20 words, or contains repetitive gibberish (e.g., 'efefef'),
+// immediately give an overall score of 10/100 and return feedback 'Invalid submission or gibberish detected'.
+function checkIsGibberishOrInvalid(rawText: string): boolean {
+  if (!rawText || !rawText.trim()) return true;
+
+  const words = rawText
+    .replace(/[#*`_\[\]()\-]/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter((w) => w.length > 0);
+
+  // 1. Less than 20 words
+  if (words.length < 20) {
+    return true;
+  }
+
+  // 2. Check for repetitive characters / pattern gibberish (e.g. 'efefef', 'aaaaaa', 'asdfasdfasdf')
+  const clean = rawText.replace(/\s+/g, '').toLowerCase();
+  const repetitivePatternRegex = /([a-z0-9]{1,4})\1{4,}/i;
+  if (repetitivePatternRegex.test(clean)) {
+    return true;
+  }
+
+  // 3. Check unique words ratio (e.g., repeating the same word 20+ times)
+  const uniqueWords = new Set(words.map((w) => w.toLowerCase()));
+  if (uniqueWords.size < 6 && words.length >= 20) {
+    return true;
+  }
+
+  return false;
 }
 
 export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
@@ -124,7 +173,6 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
     return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
-  // Allowed employer limit based on user plan
   const allowedCompanyCount = activePlan === 'basic' ? 2 : activePlan === 'pro' ? 4 : COMPANY_PRESETS.length;
   const isPremium = activePlan === 'premium';
 
@@ -155,16 +203,11 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
     });
   };
 
-  // Search bar for Action 2: search_and_generate_company_task
+  // Search bar for Action 2
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchingCompany, setIsSearchingCompany] = useState(false);
 
-  // ---------------------------------------------------------------------------
-  // REQUIREMENT 1: FILE UPLOAD STATE & PDF ATTACHMENT
-  // State variable `uploadedFile` captures the PDF file when selected via "+ Attach PDF Report".
-  // Displays the file name once attached.
-  // Pre-attached with "Stripe_Fintech_Deliverable.pdf" as shown in the interface screenshot.
-  // ---------------------------------------------------------------------------
+  // PDF File Attachment State
   const [uploadedFile, setUploadedFile] = useState<AttachedPdf | null>({
     name: 'Stripe_Fintech_Deliverable.pdf',
     sizeFormatted: '3.8 MB',
@@ -174,46 +217,56 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
   const [isExtractingPdf, setIsExtractingPdf] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // View mode switcher: 'code' or 'pdf_document'
-  const [activeWorkspaceView, setActiveWorkspaceView] = useState<'code' | 'pdf_document'>('code');
-
-  // Testing & Error Simulation States (Matches screen.png)
-  const [simulateNetworkError, setSimulateNetworkError] = useState(false);
-  const [showPayloadSchemaModal, setShowPayloadSchemaModal] = useState(false);
-
-  // Code Workspace File Tabs
-  const [activeFile, setActiveFile] = useState<'webhookHandler' | 'idempotencyService' | 'testSuite' | 'terminalLog'>('webhookHandler');
-  const [fileContents, setFileContents] = useState({
-    webhookHandler: CODE_WORKSPACE_FILES.webhookHandler,
-    idempotencyService: CODE_WORKSPACE_FILES.idempotencyService,
-    testSuite: CODE_WORKSPACE_FILES.testSuite,
-    terminalLog: CODE_WORKSPACE_FILES.terminalLog,
-  });
-
-  // Implementation Rationale & Concurrency / Analytical Trade-offs
-  const [rationaleNotes, setRationaleNotes] = useState(
-    'Acquired single-flight Redis lock with 10,000ms TTL using SET NX PX to protect the payments ledger against race condition re-entries. Cryptographic HMAC validation is computed before database mutations to shield memory pools from spoofed payload deserialization.'
+  // Single TASK SUBMISSION state (Clean business notes & trade-offs)
+  const [submissionText, setSubmissionText] = useState(
+    'Comprehensive business requirements analysis and problem-solving framework for enterprise payment resilience. Outlines clear stakeholder communication channels, explicit fallback states for intermittent drops, and structured acceptance criteria aligned with industry standards.'
   );
 
   // Time tracking
-  const [timeTakenMins, setTimeTakenMins] = useState<number>(30); // 30 mins per requirement
-  const [countdownSeconds, setCountdownSeconds] = useState<number>(13087); // 03:38:07
+  const [timeTakenMins, setTimeTakenMins] = useState<number>(30);
+  const [countdownSeconds, setCountdownSeconds] = useState<number>(13087);
 
-  // Acceptance Checklist
+  // Acceptance Checklist (free of technical engineering jargon)
   const [checklist, setChecklist] = useState<{ [key: number]: boolean }>({
     0: true,
     1: true,
-    2: false,
+    2: true,
     3: false,
   });
 
-  // Jest runner state
-  const [isTesting, setIsTesting] = useState(false);
-  const [testRunCount, setTestRunCount] = useState(4);
+  // Recharts Progress Scores State (visualize progress scores over time for completed tasks)
+  const [progressScores, setProgressScores] = useState<ProgressRecord[]>([
+    {
+      taskName: 'Milestone 1: Problem Definition',
+      shortName: 'M1: Scope',
+      overallScore: 82,
+      analyticalScore: 85,
+      communicationScore: 78,
+    },
+    {
+      taskName: 'Milestone 2: Requirements Analysis',
+      shortName: 'M2: Analysis',
+      overallScore: 86,
+      analyticalScore: 88,
+      communicationScore: 84,
+    },
+    {
+      taskName: 'Milestone 3: Architecture & Design',
+      shortName: 'M3: Design',
+      overallScore: 89,
+      analyticalScore: 91,
+      communicationScore: 86,
+    },
+    {
+      taskName: 'Milestone 4: Solution Delivery',
+      shortName: 'M4: Delivery',
+      overallScore: 92,
+      analyticalScore: 94,
+      communicationScore: 90,
+    },
+  ]);
 
-  // ---------------------------------------------------------------------------
-  // REQUIREMENT 3 & 4: GEMINI EVALUATION STATES & LIGHT PURPLE MODAL
-  // ---------------------------------------------------------------------------
+  // AI Evaluation states & modal
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [evaluationStage, setEvaluationStage] = useState<string>('');
   const [evalError, setEvalError] = useState<string | null>(null);
@@ -221,7 +274,7 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
   const [evaluationResult, setEvaluationResult] = useState<EvaluateSubmissionResponse | null>(null);
   const [copiedFeedback, setCopiedFeedback] = useState(false);
 
-  // Countdown timer for foreign office standup
+  // Office standup countdown clock
   useEffect(() => {
     const timer = setInterval(() => {
       setCountdownSeconds((prev) => (prev > 0 ? prev - 1 : 14400));
@@ -236,7 +289,13 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
     return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
   };
 
-  // Handle PDF file selection from file input
+  // Word count calculator for student validation
+  const wordCount = submissionText
+    .trim()
+    .split(/\s+/)
+    .filter((w) => w.length > 0).length;
+
+  // File selection handler
   const handlePdfFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -250,12 +309,12 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
       const text = event.target?.result as string;
       const content =
         text && text.trim().length > 0
-          ? `# EXTRACTED DELIVERABLE: ${file.name}\n` +
+          ? `# ATTACHED ASSIGNMENT DELIVERABLE: ${file.name}\n` +
             `Size: ${sizeFormatted} | Uploaded: ${new Date().toLocaleTimeString()}\n\n` +
             text
-          : `# EXTRACTED DELIVERABLE CONTENT: ${file.name}\n` +
+          : `# ATTACHED ASSIGNMENT DELIVERABLE: ${file.name}\n` +
             `Source: ${file.name} (${sizeFormatted})\n` +
-            `Parsed via NIBM Industry Simulation Ingress Engine\n\n` +
+            `Status: Processed via NIBM Document Ingress\n\n` +
             SAMPLE_BA_PDF_REPORT;
 
       setUploadedFile({
@@ -273,21 +332,18 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
     };
 
     reader.readAsText(file);
-    // Reset file input so re-selecting same file triggers event
     e.target.value = '';
   };
 
-  // Trigger file selection dialog
   const triggerPdfPicker = () => {
     fileInputRef.current?.click();
   };
 
-  // Remove attached PDF
   const handleRemoveAttachedPdf = () => {
     setUploadedFile(null);
   };
 
-  // ACTION 1: generate_task (Triggered when user clicks a preset company)
+  // Preset company selection
   const handleSelectPreset = async (company: CompanyPreset) => {
     setSelectedCompany(company);
     setIsSearchingCompany(true);
@@ -311,7 +367,6 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
     }
   };
 
-  // Enforce company limit on selectedCompany
   useEffect(() => {
     const currentIndex = COMPANY_PRESETS.findIndex(
       (c) => c.name.toLowerCase() === selectedCompany.name.toLowerCase()
@@ -321,7 +376,7 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
     }
   }, [activePlan, allowedCompanyCount, selectedCompany.name]);
 
-  // ACTION 2: search_and_generate_company_task
+  // Unlisted company search
   const handleSearchCompany = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!isPremium) {
@@ -352,13 +407,7 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
         data.detected_tech_stack ||
         data.tech_stack_or_domain ||
         data.required_technology ||
-        'TypeScript, Node.js, Express';
-
-      const isBa =
-        compStack.toLowerCase().includes('business') ||
-        compStack.toLowerCase().includes('analysis') ||
-        compStack.toLowerCase().includes('uml') ||
-        data.expected_deliverable?.toLowerCase().includes('pdf');
+        'Business Analysis, Problem Solving, Product Strategy';
 
       const discoveredCompany: CompanyPreset = {
         id: 'auto-' + Date.now(),
@@ -366,21 +415,19 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
         verified: true,
         track: `${compName} Enterprise Track`,
         location: data.simulated_timezone_and_hours?.split('(')[0] || 'Global Remote HQ',
-        assignedRole: isBa ? 'Associate Business Analyst & Consultant' : 'Junior Software Engineer - Core Systems',
-        squad: isBa ? 'Squad: Enterprise Requirements & Agile Delivery' : 'Squad: Core Systems & Resiliency',
+        assignedRole: 'Associate Business & Strategy Analyst',
+        squad: 'Enterprise Strategy & Client Delivery',
         techStack: compStack,
-        culture: data.detected_culture || 'Agile Delivery, Engineering Excellence',
-        managerName: isBa ? 'Priyantha De Silva' : 'Alex Mercer',
-        managerRole: isBa ? 'Lead Business Analyst' : 'Principal Platform Lead',
-        managerHandle: `${compName} Eng`,
-        managerAvatar: isBa
-          ? 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80'
-          : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+        culture: data.detected_culture || 'Agile Delivery, Operational Excellence',
+        managerName: 'Priyantha De Silva',
+        managerRole: 'Lead Industry Mentor',
+        managerHandle: `${compName} Lead`,
+        managerAvatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
         timezoneLabel: data.simulated_timezone_and_hours,
         accentColor: '#635bff',
         logoBg: '#635bff',
         logoText: compName.substring(0, 2).toUpperCase(),
-        defaultSubmissionType: isBa ? 'pdf_document' : 'code',
+        defaultSubmissionType: 'pdf_document',
       };
 
       setSelectedCompany(discoveredCompany);
@@ -395,55 +442,59 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
   };
 
   // ---------------------------------------------------------------------------
-  // REQUIREMENT 2 & 3: SUBMISSION LOGIC & GEMINI API INTEGRATION
-  // - Check if an attached PDF exists (uploadedFile)
-  // - If attached: submission_type = "pdf_document", student_submission = uploadedFile's name/content
-  // - Otherwise: fall back to "code"
-  // - Send exact JSON payload structure:
-  //   {
-  //     "action": "evaluate_submission",
-  //     "task_title": "Current Task Title",
-  //     "submission_type": "pdf_document" (or "code"),
-  //     "student_submission": "...",
-  //     "time_taken_mins": 30
-  //   }
-  // - Uses import.meta.env.VITE_GEMINI_API_KEY
+  // AI EVALUATION WITH ANTI-GIBBERISH RULE & PURE RAW JSON PARSING
   // ---------------------------------------------------------------------------
   const handleSubmitEvaluation = async () => {
     setIsEvaluating(true);
     setEvalError(null);
-    setEvaluationStage('Validating deliverables and connecting to Gemini Evaluator Engine...');
+    setEvaluationStage('Analyzing submission content and validating authenticity...');
 
     try {
-      if (simulateNetworkError) {
-        await new Promise((resolve) => setTimeout(resolve, 600));
-        throw new Error(
-          'Simulated Network Error: AI Evaluator endpoint timeout. Uncheck "Simulate Network Error" in top bar to test live evaluation.'
-        );
-      }
-
-      // Check if an attached PDF exists
       const hasPdf = !!uploadedFile;
       const submissionType: 'pdf_document' | 'code' = hasPdf ? 'pdf_document' : 'code';
 
-      // Build student_submission payload string
-      const studentSubmission = hasPdf
-        ? `[ATTACHED PDF DELIVERABLE]\nDocument Name: ${uploadedFile.name}\nSize: ${uploadedFile.sizeFormatted}\n\nCONTENT / REPORT EXTRACT:\n${uploadedFile.content}\n\nIMPLEMENTATION & ANALYTICAL RATIONALE:\n${rationaleNotes}`
-        : `[CODE SUBMISSION]\nFile: ${activeFile}.ts\n\nCODE IMPLEMENTATION:\n${fileContents[activeFile]}\n\nIMPLEMENTATION RATIONALE & CONCURRENCY TRADE-OFFS:\n${rationaleNotes}`;
+      // Full text to evaluate
+      const fullContentToEvaluate = hasPdf
+        ? `[ATTACHED ASSIGNMENT DELIVERABLE: ${uploadedFile.name} (${uploadedFile.sizeFormatted})]\n\nDOCUMENT BODY:\n${uploadedFile.content}\n\nSTUDENT TASK SUBMISSION & RATIONALE:\n${submissionText}`
+        : submissionText;
 
-      // Exact JSON payload structure requested:
+      // Deterministic Anti-Gibberish Check on the raw submission text
+      const rawTextForGibberishCheck = hasPdf
+        ? `${uploadedFile.name} ${uploadedFile.content} ${submissionText}`
+        : submissionText;
+
+      if (checkIsGibberishOrInvalid(rawTextForGibberishCheck)) {
+        const gibberishResult: EvaluateSubmissionResponse = {
+          action_type: 'evaluate_submission_response',
+          overall_score: 10,
+          technical_or_analytical_score: 10,
+          cultural_fit_and_communication_score: 10,
+          detailed_feedback: 'Invalid submission or gibberish detected.',
+          hr_dashboard_summary: 'Submission rejected: Invalid submission or gibberish detected.',
+          submission_type: submissionType,
+        };
+
+        setEvaluationResult(gibberishResult);
+        setEvaluationModalOpen(true);
+        onEvaluationCompleted(gibberishResult, 30, fullContentToEvaluate, submissionType);
+        setIsEvaluating(false);
+        setEvaluationStage('');
+        return;
+      }
+
+      // Strict payload to API
       const payload = {
         action: 'evaluate_submission',
         task_title: currentTask.task_title,
         submission_type: submissionType,
-        student_submission: studentSubmission,
+        student_submission: fullContentToEvaluate,
         time_taken_mins: 30,
       };
 
       const apiKey = (import.meta.env.VITE_GEMINI_API_KEY || '').trim();
       let evalData: EvaluateSubmissionResponse | null = null;
 
-      // 1. Direct Google Gemini API call with VITE_GEMINI_API_KEY
+      // 1. Direct call to Google Gemini API with VITE_GEMINI_API_KEY
       if (apiKey) {
         setEvaluationStage('Evaluating via Google Gemini (gemini-3.8-flash)...');
         try {
@@ -454,25 +505,28 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
           const isPdf = submissionType === 'pdf_document';
           const systemInstruction =
             'You are the core AI Engine for the "AI-Driven Virtual Internship & Industry Simulation Platform". You act as a Virtual Technical Manager, Business Analysis Lead, and Institutional HR Evaluator for IT undergraduates.\n\n' +
-            `The student has submitted a ${isPdf ? 'PDF assignment report ("pdf_document")' : 'code implementation ("code")'}.\n\n` +
-            (isPdf
-              ? 'CRITICAL EVALUATION CRITERIA FOR PDF REPORT:\n' +
-                'Instead of checking code syntax, evaluate the uploaded PDF content based strictly on:\n' +
-                '1. Analytical thinking and problem-solving approach.\n' +
-                '2. Business logic and technical requirement coverage.\n' +
-                '3. Professional formatting, structure, and clarity of the report.\n\n'
-              : 'CRITICAL EVALUATION CRITERIA FOR CODE:\n' +
-                'Evaluate code syntax, architectural robustness, distributed locks/idempotency, and regression resistance.\n\n') +
-            'You must ALWAYS respond in strict JSON format. Do not include markdown formatting like ```json or any conversational text outside the JSON object.\n\n' +
-            'Required JSON response structure:\n' +
+            'STRICT GUIDELINES:\n' +
+            `1. When evaluating a submission (submission_type: "${submissionType}"), return ONLY a valid JSON object.\n` +
+            '2. DO NOT wrap the JSON in ```json ... ``` markdown blocks or any conversational text.\n' +
+            '3. The JSON must strictly match this structure:\n' +
             '{\n' +
             '  "action_type": "evaluate_submission_response",\n' +
-            '  "overall_score": 88,\n' +
+            '  "overall_score": 85,\n' +
             '  "technical_or_analytical_score": 90,\n' +
-            '  "cultural_fit_and_communication_score": 85,\n' +
-            '  "detailed_feedback": "What was done right:\\n• Specific review of the content\\n\\nWhat needs improvement:\\n• Specific actionable recommendations",\n' +
-            '  "hr_dashboard_summary": "Two-sentence summary for the NIBM HR Dashboard regarding student industry readiness."\n' +
-            '}';
+            '  "cultural_fit_and_communication_score": 80,\n' +
+            '  "detailed_feedback": "Your evaluation details here...",\n' +
+            '  "hr_dashboard_summary": "Summary for HR dashboard here..."\n' +
+            '}\n\n' +
+            'CRITICAL ANTI-GIBBERISH RULE:\n' +
+            'Evaluate the ACTUAL text content of the submission. If the text is blank, less than 20 words, or contains repetitive gibberish (e.g., "efefef"), you MUST ignore any "tests passed" flags, immediately give an overall score of 10/100, and return the feedback "Invalid submission or gibberish detected".\n\n' +
+            (isPdf
+              ? 'EVALUATION CRITERIA FOR DELIVERABLE PDF REPORT:\n' +
+                'Evaluate the uploaded PDF content based on:\n' +
+                '- Analytical thinking and problem-solving approach.\n' +
+                '- Business logic and technical requirement coverage.\n' +
+                '- Professional formatting, structure, and clarity of the report.'
+              : 'EVALUATION CRITERIA FOR TEXT SUBMISSION:\n' +
+                '- Solution depth, logical reasoning, and requirement coverage.');
 
           const geminiBody = {
             system_instruction: {
@@ -504,11 +558,11 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
               const parsed = JSON.parse(cleaned);
               evalData = {
                 action_type: 'evaluate_submission_response',
-                overall_score: Number(parsed.overall_score) || 88,
+                overall_score: Number(parsed.overall_score) || 85,
                 technical_or_analytical_score:
-                  Number(parsed.technical_or_analytical_score) || Number(parsed.technical_accuracy_score) || 90,
+                  Number(parsed.technical_or_analytical_score) || 88,
                 cultural_fit_and_communication_score:
-                  Number(parsed.cultural_fit_and_communication_score) || 85,
+                  Number(parsed.cultural_fit_and_communication_score) || 82,
                 detailed_feedback: parsed.detailed_feedback || 'Submission reviewed successfully.',
                 hr_dashboard_summary:
                   parsed.hr_dashboard_summary || 'Candidate demonstrated enterprise-ready competency.',
@@ -517,11 +571,11 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
             }
           }
         } catch (directErr) {
-          console.warn('Direct Gemini API fetch error, falling back to backend endpoint:', directErr);
+          console.warn('Direct Gemini call failed, falling back to server gateway:', directErr);
         }
       }
 
-      // 2. Fallback to backend proxy (/api/engine/request)
+      // 2. Fallback to server endpoint (/api/engine/request)
       if (!evalData) {
         setEvaluationStage('Connecting to SimulateHub Evaluation Gateway (/api/engine/request)...');
         const response = await fetch('/api/engine/request', {
@@ -531,20 +585,20 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
         });
 
         if (!response.ok) {
-          throw new Error(`Evaluation gateway returned status ${response.status}: ${response.statusText}`);
+          throw new Error(`Server returned status ${response.status}: ${response.statusText}`);
         }
 
         const data = await response.json();
         evalData = {
           action_type: 'evaluate_submission_response',
-          overall_score: Number(data.overall_score) || 87,
+          overall_score: Number(data.overall_score) || 85,
           technical_or_analytical_score:
-            Number(data.technical_or_analytical_score) || Number(data.technical_accuracy_score) || 89,
+            Number(data.technical_or_analytical_score) || 88,
           cultural_fit_and_communication_score:
-            Number(data.cultural_fit_and_communication_score) || 84,
+            Number(data.cultural_fit_and_communication_score) || 82,
           detailed_feedback: data.detailed_feedback || 'Submission verified against enterprise rubrics.',
           hr_dashboard_summary:
-            data.hr_dashboard_summary || 'Candidate demonstrated high analytical rigor and requirement coverage.',
+            data.hr_dashboard_summary || 'Candidate demonstrated high analytical rigor.',
           submission_type: submissionType,
         };
       }
@@ -552,8 +606,19 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
       setEvaluationResult(evalData);
       setEvaluationModalOpen(true);
 
-      // Pass result to parent app
-      onEvaluationCompleted(evalData, 30, studentSubmission, submissionType);
+      // Append new score to the Recharts Progress Score Bar Chart
+      if (evalData.overall_score > 10) {
+        const newRecord: ProgressRecord = {
+          taskName: currentTask.task_title.slice(0, 24),
+          shortName: `Current (${evalData.overall_score}%)`,
+          overallScore: evalData.overall_score,
+          analyticalScore: evalData.technical_or_analytical_score,
+          communicationScore: evalData.cultural_fit_and_communication_score,
+        };
+        setProgressScores((prev) => [...prev.slice(-3), newRecord]);
+      }
+
+      onEvaluationCompleted(evalData, 30, fullContentToEvaluate, submissionType);
     } catch (err: any) {
       console.error('AI Evaluation error:', err);
       setEvalError(err.message || 'AI Evaluation encountered an error. Please try again.');
@@ -563,17 +628,9 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
     }
   };
 
-  const handleRunTests = () => {
-    setIsTesting(true);
-    setTimeout(() => {
-      setIsTesting(false);
-      setTestRunCount((prev) => prev + 1);
-    }, 600);
-  };
-
   const handleCopyFeedback = () => {
     if (!evaluationResult) return;
-    const text = `SimulateHub AI Evaluation Report\nTask: ${currentTask.task_title}\nCompany: ${selectedCompany.name}\nSubmission Type: ${evaluationResult.submission_type || (uploadedFile ? 'pdf_document' : 'code')}\nOverall Score: ${evaluationResult.overall_score}/100\nTechnical/Analytical Score: ${evaluationResult.technical_or_analytical_score}/100\nCulture/Communication Score: ${evaluationResult.cultural_fit_and_communication_score}/100\n\nHR Dashboard Summary:\n${evaluationResult.hr_dashboard_summary}\n\nDetailed Feedback:\n${evaluationResult.detailed_feedback}`;
+    const text = `SimulateHub AI Evaluation Report\nTask: ${currentTask.task_title}\nCompany: ${selectedCompany.name}\nOverall Score: ${evaluationResult.overall_score}/100\nTechnical/Analytical: ${evaluationResult.technical_or_analytical_score}/100\nCommunication: ${evaluationResult.cultural_fit_and_communication_score}/100\n\nHR Dashboard Summary:\n${evaluationResult.hr_dashboard_summary}\n\nDetailed Feedback:\n${evaluationResult.detailed_feedback}`;
     navigator.clipboard.writeText(text);
     setCopiedFeedback(true);
     setTimeout(() => setCopiedFeedback(false), 2000);
@@ -581,7 +638,7 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-3 text-[#131b2e] relative">
-      {/* Hidden file input for attaching/replacing PDF reports */}
+      {/* Hidden file input */}
       <input
         ref={fileInputRef}
         type="file"
@@ -590,7 +647,7 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
         className="hidden"
       />
 
-      {/* Plan Restriction Toast / Alert Notification (Light Purple & White Theme) */}
+      {/* Plan Restriction Toast */}
       {lockedToast && (
         <div className="fixed top-20 right-4 sm:right-8 z-50 max-w-sm sm:max-w-md w-full animate-in slide-in-from-top-3 fade-in duration-200">
           <div className="bg-white/95 backdrop-blur-md rounded-2xl p-4 border-2 border-[#635bff]/30 shadow-2xl shadow-[#635bff]/20 ring-4 ring-[#635bff]/10 flex items-start gap-3.5 relative">
@@ -611,7 +668,7 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
               </h4>
               <p className="text-xs text-slate-600 leading-normal">
                 {lockedToast.message ||
-                  `Access to ${lockedToast.companyName} is restricted under your ${activePlan} plan. Upgrade to unlock all company simulations.`}
+                  `Access to ${lockedToast.companyName} is restricted under your ${activePlan} plan.`}
               </p>
               <div className="pt-2 flex items-center gap-2">
                 {onOpenUpgrade && (
@@ -648,75 +705,11 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
         </div>
       )}
 
-      {/* Payload Schema Inspection Modal */}
-      {showPayloadSchemaModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
-          <div className="bg-white rounded-2xl max-w-xl w-full border border-slate-200 shadow-2xl overflow-hidden">
-            <div className="bg-gradient-to-r from-[#493ee5] to-[#635bff] p-4 text-white flex items-center justify-between">
-              <div className="flex items-center gap-2 font-bold text-sm">
-                <Code2 className="w-4 h-4" />
-                <span>Strict API Payload Specification (Action: evaluate_submission)</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowPayloadSchemaModal(false)}
-                className="p-1 rounded-lg hover:bg-white/20 text-white transition-colors cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="p-5 space-y-3 text-xs">
-              <p className="text-slate-600">
-                Dispatched to Gemini API using{' '}
-                <code className="text-[#635bff] font-mono font-semibold">import.meta.env.VITE_GEMINI_API_KEY</code>:
-              </p>
-              <div className="bg-[#0f172a] text-[#dae2fd] p-3.5 rounded-xl font-mono text-[11px] overflow-x-auto leading-relaxed border border-slate-800">
-                <pre>{JSON.stringify(
-                  {
-                    action: 'evaluate_submission',
-                    task_title: currentTask.task_title,
-                    submission_type: uploadedFile ? 'pdf_document' : 'code',
-                    student_submission: uploadedFile
-                      ? `[Attached PDF: ${uploadedFile.name} (${uploadedFile.sizeFormatted})]`
-                      : `[Raw code implementation from ${activeFile}.ts]`,
-                    time_taken_mins: 30,
-                  },
-                  null,
-                  2
-                )}</pre>
-              </div>
-              <div className="bg-[#faf8ff] border border-[#635bff]/20 rounded-xl p-3 space-y-1">
-                <div className="font-bold text-[#493ee5] flex items-center gap-1.5">
-                  <ShieldCheck className="w-3.5 h-3.5 text-[#635bff]" />
-                  <span>Evaluation Criteria</span>
-                </div>
-                <p className="text-[11px] text-slate-600">
-                  {uploadedFile
-                    ? 'PDF Document: Evaluates analytical thinking, business logic, requirement coverage, and professional report structure.'
-                    : 'Code: Evaluates syntax, idempotency locks, regression suites, and concurrency trade-offs.'}
-                </p>
-              </div>
-              <div className="pt-2 flex justify-end">
-                <button
-                  type="button"
-                  onClick={() => setShowPayloadSchemaModal(false)}
-                  className="px-4 py-2 bg-[#635bff] text-white font-bold rounded-xl hover:bg-[#5248e5] transition-colors cursor-pointer"
-                >
-                  Close Specification
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ----------------------------------------------------------------------- */}
-      {/* REQUIREMENT 4: LIGHT PURPLE MODAL FOR EVALUATION RESULTS */}
-      {/* ----------------------------------------------------------------------- */}
+      {/* Light Purple Evaluation Results Modal */}
       {evaluationModalOpen && evaluationResult && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 overflow-y-auto animate-in fade-in duration-200">
           <div className="bg-white rounded-3xl max-w-2xl w-full border-2 border-[#635bff]/30 shadow-2xl overflow-hidden relative text-[#131b2e] my-auto">
-            {/* Header with light purple gradient */}
+            {/* Modal Header */}
             <div className="bg-gradient-to-r from-[#493ee5] via-[#635bff] to-[#7c3aed] text-white p-5 sm:p-6 relative">
               <button
                 type="button"
@@ -729,7 +722,7 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
 
               <div className="flex items-center gap-2 mb-2 text-xs font-semibold uppercase tracking-wider text-[#e2dfff]">
                 <Award className="w-4 h-4 text-[#ede9fe]" />
-                <span>SimulateHub · Institutional HR & Technical Evaluation</span>
+                <span>SimulateHub · Institutional HR & Technical Evaluation Report</span>
               </div>
 
               <h2 className="text-xl sm:text-2xl font-bold tracking-tight font-display">
@@ -744,20 +737,25 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
                 </span>
                 <span>•</span>
                 <span className="bg-white/15 px-2 py-0.5 rounded text-[11px] font-medium">
-                  {evaluationResult.submission_type === 'pdf_document' ? 'PDF Assignment Report' : 'Code Submission'}
+                  {uploadedFile ? 'PDF Assignment Report' : 'Analytical Text Submission'}
                 </span>
-                <span>•</span>
-                <span>30 mins</span>
               </div>
             </div>
 
-            {/* Modal Body */}
+            {/* Modal Content */}
             <div className="p-5 sm:p-6 space-y-5 max-h-[75vh] overflow-y-auto">
-              {/* Score Badges Row */}
+              {/* Score Badges */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {/* Overall Score */}
-                <div className="bg-[#faf8ff] rounded-2xl p-4 border-2 border-[#635bff]/25 flex items-center gap-3.5 shadow-xs">
-                  <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#493ee5] to-[#635bff] text-white flex flex-col items-center justify-center font-display font-black text-xl shadow-md shadow-[#635bff]/30 shrink-0">
+                <div className={`rounded-2xl p-4 border-2 flex items-center gap-3.5 shadow-xs ${
+                  evaluationResult.overall_score <= 10
+                    ? 'bg-rose-50 border-rose-200'
+                    : 'bg-[#faf8ff] border-[#635bff]/25'
+                }`}>
+                  <div className={`w-14 h-14 rounded-2xl text-white flex flex-col items-center justify-center font-display font-black text-xl shadow-md shrink-0 ${
+                    evaluationResult.overall_score <= 10
+                      ? 'bg-rose-600 shadow-rose-600/30'
+                      : 'bg-gradient-to-br from-[#493ee5] to-[#635bff] shadow-[#635bff]/30'
+                  }`}>
                     <span>{evaluationResult.overall_score}</span>
                     <span className="text-[8px] font-sans font-normal opacity-80 -mt-1">/100</span>
                   </div>
@@ -766,20 +764,21 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
                       OVERALL SCORE
                     </span>
                     <div className="text-sm font-bold text-[#0f172a]">
-                      {evaluationResult.overall_score >= 85
+                      {evaluationResult.overall_score <= 10
+                        ? 'Invalid / Rejected'
+                        : evaluationResult.overall_score >= 85
                         ? 'Enterprise Ready'
-                        : evaluationResult.overall_score >= 70
-                        ? 'Competent'
-                        : 'Needs Revision'}
+                        : 'Competent'}
                     </div>
-                    <div className="text-[11px] text-emerald-600 font-semibold flex items-center gap-1 mt-0.5">
+                    <div className={`text-[11px] font-semibold flex items-center gap-1 mt-0.5 ${
+                      evaluationResult.overall_score <= 10 ? 'text-rose-600' : 'text-emerald-600'
+                    }`}>
                       <CheckCircle2 className="w-3 h-3" />
-                      <span>Institutional Pass</span>
+                      <span>{evaluationResult.overall_score <= 10 ? 'Resubmission Required' : 'Institutional Pass'}</span>
                     </div>
                   </div>
                 </div>
 
-                {/* Technical / Analytical Score */}
                 <div className="bg-white rounded-2xl p-4 border border-slate-200 flex items-center gap-3.5 shadow-xs">
                   <div className="w-12 h-12 rounded-xl bg-[#ede9fe] text-[#493ee5] flex flex-col items-center justify-center font-display font-black text-lg border border-[#635bff]/20 shrink-0">
                     <span>{evaluationResult.technical_or_analytical_score}</span>
@@ -787,16 +786,13 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
                   </div>
                   <div>
                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                      {evaluationResult.submission_type === 'pdf_document' ? 'ANALYTICAL RIGOR' : 'TECHNICAL LOGIC'}
+                      ANALYTICAL RIGOR
                     </span>
-                    <div className="text-xs font-bold text-[#0f172a]">
-                      {evaluationResult.submission_type === 'pdf_document' ? 'Requirement Coverage' : 'Code Hygiene'}
-                    </div>
+                    <div className="text-xs font-bold text-[#0f172a]">Requirements Coverage</div>
                     <div className="text-[10px] text-slate-500">Benchmark: 80+</div>
                   </div>
                 </div>
 
-                {/* Cultural Fit & Communication */}
                 <div className="bg-white rounded-2xl p-4 border border-slate-200 flex items-center gap-3.5 shadow-xs">
                   <div className="w-12 h-12 rounded-xl bg-[#ede9fe] text-[#493ee5] flex flex-col items-center justify-center font-display font-black text-lg border border-[#635bff]/20 shrink-0">
                     <span>{evaluationResult.cultural_fit_and_communication_score}</span>
@@ -806,26 +802,28 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
                     <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
                       COMMUNICATION
                     </span>
-                    <div className="text-xs font-bold text-[#0f172a]">Report Structure</div>
-                    <div className="text-[10px] text-slate-500">Professional Clarity</div>
+                    <div className="text-xs font-bold text-[#0f172a]">Professional Clarity</div>
+                    <div className="text-[10px] text-slate-500">Structure & Tone</div>
                   </div>
                 </div>
               </div>
 
-              {/* Detailed Review Section */}
+              {/* Detailed Feedback */}
               <div className="bg-white rounded-2xl p-4 border border-slate-200 space-y-2 shadow-xs">
                 <div className="flex items-center gap-2 text-xs font-bold text-[#0f172a] uppercase tracking-wider">
                   <Sparkles className="w-4 h-4 text-[#635bff]" />
-                  <span>
-                    Detailed AI Review ({evaluationResult.submission_type === 'pdf_document' ? 'PDF Content' : 'Code'})
-                  </span>
+                  <span>AI Evaluator Detailed Feedback</span>
                 </div>
-                <div className="text-xs text-slate-700 leading-relaxed whitespace-pre-line bg-[#faf8ff] p-3.5 rounded-xl border border-[#635bff]/15 font-sans">
+                <div className={`text-xs leading-relaxed whitespace-pre-line p-3.5 rounded-xl border font-sans ${
+                  evaluationResult.overall_score <= 10
+                    ? 'bg-rose-50 text-rose-800 border-rose-200 font-semibold'
+                    : 'bg-[#faf8ff] text-slate-700 border-[#635bff]/15'
+                }`}>
                   {evaluationResult.detailed_feedback}
                 </div>
               </div>
 
-              {/* HR Dashboard Summary Card */}
+              {/* HR Summary */}
               <div className="bg-gradient-to-br from-[#ede9fe]/60 via-white to-[#faf8ff] rounded-2xl p-4 border border-[#635bff]/25 space-y-2 shadow-xs">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-xs font-bold text-[#493ee5] uppercase tracking-wider">
@@ -833,7 +831,7 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
                     <span>NIBM HR Dashboard Summary</span>
                   </div>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#ede9fe] text-[#493ee5] border border-[#635bff]/20">
-                    Placement Metric
+                    Institutional Record
                   </span>
                 </div>
                 <p className="text-xs text-slate-800 leading-relaxed font-medium bg-white/80 p-3 rounded-xl border border-[#635bff]/10">
@@ -841,7 +839,7 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
                 </p>
               </div>
 
-              {/* Modal Action Buttons */}
+              {/* Modal Actions */}
               <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100">
                 <button
                   type="button"
@@ -877,15 +875,15 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
         </div>
       )}
 
-      {/* Active Sandbox Session Sub-Bar (Matches screen.png) */}
+      {/* Active Simulation Session Sub-Bar (Cleaned of engineering jargon) */}
       <div className="bg-[#ede9fe]/50 border border-[#635bff]/20 rounded-xl px-4 py-2 flex flex-wrap items-center justify-between text-xs gap-3">
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-1.5 font-bold text-[#493ee5]">
             <span className="w-2 h-2 rounded-full bg-[#635bff] animate-pulse"></span>
-            <span className="uppercase tracking-wider text-[11px]">ACTIVE SANDBOX SESSION</span>
+            <span className="uppercase tracking-wider text-[11px]">ACTIVE SIMULATION SESSION</span>
           </div>
           <span className="text-slate-300">/</span>
-          <span className="text-slate-800 font-medium">Sprint 4 · Dublin Core Platform Hub</span>
+          <span className="text-slate-800 font-medium">Milestone 4 · Enterprise Project Workspace</span>
           <span className="text-slate-300">/</span>
           <span className="text-[#635bff] font-semibold bg-white px-2 py-0.5 rounded border border-[#635bff]/15">
             Track: {selectedCompany.track}
@@ -912,18 +910,17 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
         <div className="flex items-center gap-4 text-[11px] font-mono text-slate-600">
           <span className="flex items-center gap-1">
             <Cpu className="w-3.5 h-3.5 text-slate-500" />
-            Allocated: 2 vCPU / 4GB RAM
+            Simulated Environment Ready
           </span>
-          <span className="flex items-center gap-1 text-emerald-700">
+          <span className="flex items-center gap-1 text-emerald-700 font-semibold">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-            Redis Cluster 127.0.0.1:6379 Connected
+            Evaluation Engine Online
           </span>
         </div>
       </div>
 
-      {/* Unlisted Company Search Bar & Preset Companies */}
+      {/* Preset Companies & Search */}
       <div className="bg-white rounded-xl p-3 border border-slate-200 shadow-xs flex flex-col md:flex-row items-center justify-between gap-3">
-        {/* Preset Company Chips (Action 1 triggers) */}
         <div className="flex items-center gap-2 overflow-x-auto w-full md:w-auto pb-1 md:pb-0">
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider shrink-0 text-[10px]">
             Employers:
@@ -966,7 +963,6 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
           })}
         </div>
 
-        {/* Action 2: search_and_generate_company_task input */}
         <div
           className="relative w-full md:w-84"
           onMouseEnter={() => !isPremium && setIsSearchHovered(true)}
@@ -977,32 +973,22 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
               <div className="bg-[#0f172a] text-white text-[11px] font-medium px-3 py-1.5 rounded-lg shadow-xl flex items-center gap-1.5 whitespace-nowrap border border-slate-700">
                 <Lock className="w-3 h-3 text-[#a5b4fc]" />
                 <span>Custom AI Generation is a Premium feature.</span>
-                <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-[#0f172a]"></div>
               </div>
             </div>
           )}
 
           <form onSubmit={handleSearchCompany} className="flex items-center gap-2 w-full">
             <div className="relative flex-1">
-              <Search
-                className={`w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 ${
-                  !isPremium ? 'text-slate-300' : 'text-slate-400'
-                }`}
-              />
+              <Search className={`w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 ${!isPremium ? 'text-slate-300' : 'text-slate-400'}`} />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 disabled={!isPremium}
-                title={!isPremium ? 'Custom AI Generation is a Premium feature.' : undefined}
-                placeholder={
-                  isPremium
-                    ? 'Search unlisted company (e.g. Airbnb, Uber, Shopify)...'
-                    : 'Search unlisted company (Premium only)...'
-                }
+                placeholder={isPremium ? 'Search unlisted company (e.g. Airbnb, Uber)...' : 'Search unlisted company (Premium only)...'}
                 className={`w-full pl-8 pr-2 py-1.5 text-xs rounded-lg border transition-all ${
                   !isPremium
-                    ? 'bg-slate-100/90 text-slate-400 border-slate-200 cursor-not-allowed select-none placeholder:text-slate-400'
+                    ? 'bg-slate-100/90 text-slate-400 border-slate-200 cursor-not-allowed select-none'
                     : 'bg-[#faf8ff] text-slate-800 border-slate-300 focus:outline-none focus:border-[#635bff] focus:bg-white'
                 }`}
               />
@@ -1010,7 +996,6 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
             <button
               type="submit"
               disabled={!isPremium || isSearchingCompany || !searchQuery.trim()}
-              title={!isPremium ? 'Custom AI Generation is a Premium feature.' : undefined}
               className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all shrink-0 flex items-center gap-1 ${
                 !isPremium
                   ? 'bg-slate-200/80 text-slate-400 cursor-not-allowed border border-slate-200'
@@ -1032,22 +1017,22 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
         </div>
       </div>
 
-      {/* Evaluating banner */}
+      {/* Evaluating Status Banner */}
       {isEvaluating && (
         <div className="bg-white/95 rounded-2xl p-6 border-2 border-[#635bff]/40 shadow-xl shadow-[#635bff]/10 ring-4 ring-[#635bff]/10 text-center animate-in fade-in duration-200">
           <div className="w-14 h-14 rounded-2xl bg-[#ede9fe] text-[#635bff] flex items-center justify-center mx-auto mb-3 shadow-inner">
             <RefreshCw className="w-7 h-7 animate-spin" />
           </div>
           <h3 className="text-base font-bold text-[#0f172a] font-display">
-            AI is evaluating your submission with Google Gemini...
+            AI is evaluating your task submission with Google Gemini...
           </h3>
           <p className="text-xs text-slate-600 mt-1 max-w-md mx-auto">
-            {evaluationStage || 'Benchmarking against enterprise rubrics...'}
+            {evaluationStage || 'Benchmarking against enterprise rubrics and industry standards...'}
           </p>
           <div className="flex items-center justify-center gap-4 mt-4 text-[11px] text-[#493ee5] font-medium">
             <span className="flex items-center gap-1.5 bg-[#ede9fe] px-3 py-1 rounded-full border border-[#635bff]/20">
               <Sparkles className="w-3.5 h-3.5 text-[#635bff]" />
-              Submission Type: {uploadedFile ? 'pdf_document' : 'code'}
+              Format: {uploadedFile ? 'PDF Document Deliverable' : 'Task Submission Notes'}
             </span>
             <span className="flex items-center gap-1.5 bg-[#ede9fe] px-3 py-1 rounded-full border border-[#635bff]/20">
               <BrainCircuit className="w-3.5 h-3.5 text-[#635bff]" />
@@ -1057,7 +1042,7 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
         </div>
       )}
 
-      {/* Error banner */}
+      {/* Error Banner */}
       {evalError && (
         <div className="bg-rose-50/90 rounded-2xl p-4 border-2 border-rose-200 shadow-sm flex items-start justify-between gap-3 animate-in fade-in duration-200">
           <div className="flex items-start gap-3">
@@ -1079,7 +1064,7 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
         </div>
       )}
 
-      {/* Main Grid: Left Spec Sidebar + Right Code Workspace (Matches screen.png) */}
+      {/* Main Grid: Left Spec Sidebar + Right Workspace (Chart & Unified Task Submission) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
         {/* Left Column (4 cols) */}
         <div className="lg:col-span-4 space-y-4">
@@ -1121,7 +1106,7 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
             </div>
           </div>
 
-          {/* Foreign Timezone Sync (Dual Clocks) */}
+          {/* Foreign Timezone Sync */}
           <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm space-y-2">
             <div className="flex items-center justify-between text-xs font-semibold text-slate-600">
               <div className="flex items-center gap-1.5">
@@ -1146,12 +1131,12 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
             </div>
           </div>
 
-          {/* Time to Office Standup / EOD Handover Card (Matches screen.png) */}
+          {/* Time to Office Standup / Handover Card */}
           <div className="bg-gradient-to-br from-[#493ee5] to-[#635bff] text-white rounded-2xl p-4 shadow-md shadow-[#635bff]/20 relative overflow-hidden">
             <div className="flex items-center justify-between text-xs font-semibold text-[#e2dfff]">
               <div className="flex items-center gap-1.5">
                 <Clock className="w-3.5 h-3.5" />
-                <span>Time to Office Standup / EOD Handover</span>
+                <span>Time to Office Standup / Handover</span>
               </div>
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
             </div>
@@ -1166,37 +1151,16 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
                 Priority 1
               </span>
             </div>
-
-            <div className="mt-2 text-[11px] text-white/70 flex items-center gap-1">
-              <Clock className="w-3 h-3 text-white/80" />
-              <span>Office Hours Active · Standup window locking in 3h 47m</span>
-            </div>
           </div>
 
-          {/* AI-Generated HR Onboarding Briefing (Sarah Jenkins) */}
+          {/* AI-Generated Onboarding Briefing */}
           <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm relative">
             <div className="flex items-center justify-between pb-2 border-b border-slate-100">
               <div className="flex items-center gap-1.5 text-[11px] font-bold text-[#493ee5] uppercase tracking-wider">
                 <Sparkles className="w-3.5 h-3.5 text-[#635bff]" />
-                <span>AI-Generated HR Onboarding Briefing</span>
+                <span>AI-Generated Onboarding Briefing</span>
               </div>
-              <span className="text-[10px] font-mono text-slate-400">v4.2 Auth</span>
-            </div>
-
-            <div className="flex items-start gap-3 mt-3">
-              <img
-                src={selectedCompany.managerAvatar}
-                alt={selectedCompany.managerName}
-                className="w-10 h-10 rounded-xl object-cover border border-[#635bff]/20"
-              />
-              <div>
-                <h4 className="text-xs font-bold text-[#0f172a]">
-                  {selectedCompany.managerName} · {selectedCompany.managerRole}
-                </h4>
-                <p className="text-[10px] text-slate-500">
-                  {selectedCompany.managerHandle} · Sent 14 mins ago
-                </p>
-              </div>
+              <span className="text-[10px] font-mono text-slate-400">v4.2</span>
             </div>
 
             <div className="mt-3 text-xs text-slate-700 leading-relaxed italic bg-slate-50 p-3 rounded-xl border border-slate-100">
@@ -1204,7 +1168,7 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
             </div>
           </div>
 
-          {/* Acceptance Criteria Checklist */}
+          {/* Acceptance Criteria Checklist (Clear of engineering jargon) */}
           <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm space-y-2.5">
             <h4 className="text-xs font-bold text-[#0f172a] uppercase tracking-wider flex items-center gap-1.5">
               <CheckSquare className="w-3.5 h-3.5 text-[#635bff]" />
@@ -1222,11 +1186,8 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
                   <Square className="w-4 h-4 text-slate-300 shrink-0 mt-0.5" />
                 )}
                 <div>
-                  <strong className="text-slate-800">1. Distributed Redis Locking</strong>
-                  <p className="text-[11px] text-slate-500">
-                    Acquire single-flight key with 10,000ms TTL via{' '}
-                    <code className="text-[#635bff] font-mono">SET NX EX</code>
-                  </p>
+                  <strong className="text-slate-800">1. Problem Scope & Requirements Analysis</strong>
+                  <p className="text-[11px] text-slate-500">Deconstruct business objectives and functional constraints.</p>
                 </div>
               </div>
 
@@ -1240,10 +1201,8 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
                   <Square className="w-4 h-4 text-slate-300 shrink-0 mt-0.5" />
                 )}
                 <div>
-                  <strong className="text-slate-800">2. HMAC-SHA256 Signature Verification</strong>
-                  <p className="text-[11px] text-slate-500">
-                    Validate <code className="text-[#635bff] font-mono">stripe-signature</code> against raw byte buffers
-                  </p>
+                  <strong className="text-slate-800">2. Solution Architecture & Business Logic</strong>
+                  <p className="text-[11px] text-slate-500">Validate process flows against enterprise standards.</p>
                 </div>
               </div>
 
@@ -1257,10 +1216,8 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
                   <Square className="w-4 h-4 text-slate-300 shrink-0 mt-0.5" />
                 )}
                 <div>
-                  <strong className="text-slate-800">3. Handle Race Conditions & Cached Replay</strong>
-                  <p className="text-[11px] text-slate-500">
-                    If duplicate event ID received within window, return HTTP 200 with stored payload
-                  </p>
+                  <strong className="text-slate-800">3. Operational Resilience & Exception Scenarios</strong>
+                  <p className="text-[11px] text-slate-500">Detail recovery mechanisms and fault tolerance safeguards.</p>
                 </div>
               </div>
 
@@ -1274,64 +1231,25 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
                   <Square className="w-4 h-4 text-slate-300 shrink-0 mt-0.5" />
                 )}
                 <div>
-                  <strong className="text-slate-800">4. Pass Edge-Case Regression Suites</strong>
-                  <p className="text-[11px] text-slate-500">
-                    Zero dropped packets during simulated out-of-order webhook deliveries
-                  </p>
+                  <strong className="text-slate-800">4. Executive Summary & Structured Deliverable</strong>
+                  <p className="text-[11px] text-slate-500">Clear documentation ready for institutional review.</p>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Required Tech Stack */}
-          <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-2">
-              REQUIRED TECH STACK
-            </span>
-            <div className="flex flex-wrap gap-1.5">
-              {(
-                ('required_technology' in currentTask
-                  ? currentTask.required_technology
-                  : currentTask.detected_tech_stack) || selectedCompany.techStack
-              )
-                .split(',')
-                .map((tech: string, i: number) => (
-                  <span
-                    key={i}
-                    className="inline-flex items-center gap-1 text-[11px] font-mono px-2.5 py-1 rounded-md bg-[#faf8ff] text-slate-800 border border-[#635bff]/15 font-medium"
-                  >
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#635bff]"></span>
-                    {tech.trim()}
-                  </span>
-                ))}
-            </div>
-          </div>
-
-          {/* Engineering Specs & Fixtures */}
+          {/* Project Specifications */}
           <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm space-y-2">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
-              ENGINEERING SPECS & FIXTURES
+              PROJECT SPECIFICATIONS & ATTACHMENTS
             </span>
 
             <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-200 text-xs">
               <div className="flex items-center gap-2">
                 <FileText className="w-4 h-4 text-red-500" />
                 <div>
-                  <div className="font-semibold text-slate-800">idempotency_spec_v2.pdf</div>
-                  <div className="text-[10px] text-slate-400">384 KB · Internal Dublin Eng Standard</div>
-                </div>
-              </div>
-              <button className="p-1.5 rounded-md hover:bg-slate-200 text-slate-600 transition-colors">
-                <Download className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            <div className="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-200 text-xs">
-              <div className="flex items-center gap-2">
-                <Code2 className="w-4 h-4 text-[#635bff]" />
-                <div>
-                  <div className="font-semibold text-slate-800">mock_stripe_payloads.json</div>
-                  <div className="text-[10px] text-slate-400">14.2 KB · 12 Test cases included</div>
+                  <div className="font-semibold text-slate-800">Project_Requirements_Specification.pdf</div>
+                  <div className="text-[10px] text-slate-400">384 KB · Dublin Industry Standard</div>
                 </div>
               </div>
               <button className="p-1.5 rounded-md hover:bg-slate-200 text-slate-600 transition-colors">
@@ -1341,377 +1259,218 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
           </div>
         </div>
 
-        {/* Right Column: Code Editor & Jest Runner (8 cols) */}
+        {/* Right Column (8 cols): Progress Chart + Unified TASK SUBMISSION Container */}
         <div className="lg:col-span-8 space-y-4">
-          {/* Top Switcher Bar (Matches screen.png) */}
-          <div className="bg-white rounded-2xl p-2.5 border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => setActiveWorkspaceView('code')}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
-                  activeWorkspaceView === 'code'
-                    ? 'bg-[#635bff] text-white shadow-xs'
-                    : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
-                }`}
-              >
-                <Code2 className="w-3.5 h-3.5" />
-                <span>Code Editor</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveWorkspaceView('pdf_document')}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
-                  activeWorkspaceView === 'pdf_document'
-                    ? 'bg-[#635bff] text-white shadow-xs'
-                    : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
-                }`}
-              >
-                <FileText className="w-3.5 h-3.5 text-[#635bff]" />
-                <span>Upload PDF Report</span>
-              </button>
-            </div>
-
-            <div className="flex items-center gap-4 text-xs">
-              <label className="flex items-center gap-2 text-slate-600 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={simulateNetworkError}
-                  onChange={(e) => setSimulateNetworkError(e.target.checked)}
-                  className="rounded text-[#635bff] focus:ring-[#635bff] border-slate-300 cursor-pointer"
-                />
-                <span className="flex items-center gap-1">
-                  <span className="text-slate-400">⚙</span>
-                  <span>Simulate Network Error</span>
-                </span>
-              </label>
-
-              <button
-                type="button"
-                onClick={() => setShowPayloadSchemaModal(true)}
-                className="text-slate-600 hover:text-[#635bff] flex items-center gap-1 font-mono text-[11px] px-2 py-1 rounded hover:bg-slate-100 transition-colors cursor-pointer"
-              >
-                <span>{`{ }`}</span>
-                <span>View Payload Schema</span>
-              </button>
-            </div>
-          </div>
-
-          {/* View: Code Editor vs PDF Viewer */}
-          {activeWorkspaceView === 'code' ? (
-            <div className="bg-[#0f172a] rounded-2xl border border-slate-800 shadow-xl overflow-hidden flex flex-col text-slate-300">
-              {/* Editor Top Bar with File Tabs */}
-              <div className="bg-[#1e293b] px-3 py-2 flex flex-wrap items-center justify-between gap-2 border-b border-slate-800">
-                <div className="flex items-center gap-1 overflow-x-auto">
-                  <button
-                    onClick={() => setActiveFile('webhookHandler')}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono rounded-lg transition-colors cursor-pointer ${
-                      activeFile === 'webhookHandler'
-                        ? 'bg-[#0f172a] text-white font-semibold border-b-2 border-[#635bff]'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    <span className="w-2 h-2 rounded-full bg-blue-400"></span>
-                    <span>webhookHandler.ts</span>
-                  </button>
-
-                  <button
-                    onClick={() => setActiveFile('idempotencyService')}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono rounded-lg transition-colors cursor-pointer ${
-                      activeFile === 'idempotencyService'
-                        ? 'bg-[#0f172a] text-white font-semibold border-b-2 border-[#635bff]'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    <Code2 className="w-3 h-3 text-purple-400" />
-                    <span>idempotencyService.ts</span>
-                  </button>
-
-                  <button
-                    onClick={() => setActiveFile('testSuite')}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono rounded-lg transition-colors cursor-pointer ${
-                      activeFile === 'testSuite'
-                        ? 'bg-[#0f172a] text-white font-semibold border-b-2 border-[#635bff]'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                    <span>tests/webhook.test.ts</span>
-                  </button>
-
-                  <button
-                    onClick={() => setActiveFile('terminalLog')}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono rounded-lg transition-colors cursor-pointer ${
-                      activeFile === 'terminalLog'
-                        ? 'bg-[#0f172a] text-white font-semibold border-b-2 border-[#635bff]'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    <Terminal className="w-3 h-3 text-amber-400" />
-                    <span>terminal.log</span>
-                  </button>
-                </div>
-
-                {/* Status and Action Buttons */}
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="inline-flex items-center gap-1 text-[11px] text-emerald-400 font-mono">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                    TS 5.4 · 0 Errors
-                  </span>
-                  <span className="text-slate-600">|</span>
-                  <button
-                    type="button"
-                    onClick={() => {}}
-                    className="text-slate-400 hover:text-slate-200 text-[11px] font-mono cursor-pointer"
-                  >
-                    Format
-                  </button>
-                  <button
-                    onClick={handleRunTests}
-                    disabled={isTesting}
-                    className="inline-flex items-center gap-1 px-3 py-1 rounded-md bg-[#635bff] hover:bg-[#5248e5] text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
-                  >
-                    {isTesting ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3 fill-white" />}
-                    <span>Run Jest Suite</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Code Textarea Area */}
-              <div className="p-4">
-                <div className="flex items-center justify-between text-[11px] font-mono text-slate-500 mb-2">
-                  <span>// {activeFile}.ts</span>
-                  <span>{fileContents[activeFile].split('\n').length} lines · UTF-8</span>
-                </div>
-                <textarea
-                  value={fileContents[activeFile]}
-                  onChange={(e) =>
-                    setFileContents({
-                      ...fileContents,
-                      [activeFile]: e.target.value,
-                    })
-                  }
-                  rows={19}
-                  className="w-full font-mono text-xs p-3.5 rounded-xl border border-slate-800 bg-[#090d16] text-[#dae2fd] focus:outline-none focus:ring-1 focus:ring-[#635bff] leading-relaxed shadow-inner selection:bg-[#635bff]/40"
-                />
-              </div>
-
-              {/* Jest Execution Console (Active Run) - Matches screen.png */}
-              <div className="bg-[#050811] border-t border-slate-800 p-3.5 text-xs font-mono">
-                <div className="flex items-center justify-between text-[11px] pb-2 border-b border-slate-800/80">
-                  <div className="flex items-center gap-1.5 text-emerald-400 font-bold">
-                    <CheckCircle2 className="w-3.5 h-3.5" />
-                    <span>Jest Execution Console (Active Run)</span>
-                  </div>
-                  <div className="text-slate-500 text-[10px]">
-                    Execution time: 312ms · Memory RSS: 48.2MB
-                  </div>
-                </div>
-
-                <div className="mt-2.5 space-y-1 text-slate-300 text-[11px]">
-                  <div className="text-emerald-400 font-bold">
-                    PASS tests/webhook.test.ts (4 tests passed, 100% code coverage)
-                  </div>
-                  <div className="text-slate-400 pl-2">✓ should verify authentic HMAC-SHA256 signature (24 ms)</div>
-                  <div className="text-slate-400 pl-2">✓ should acquire Redis NX lock and return 200 HTTP response (42 ms)</div>
-                  <div className="text-slate-400 pl-2">✓ should drop duplicate replay packets within 10,000ms TTL window (18 ms)</div>
-                  <div className="text-slate-400 pl-2">✓ should persist idempotent receipt token for 24 hours (35 ms)</div>
-                </div>
-              </div>
-            </div>
-          ) : (
-            /* Upload PDF Report View */
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-9 h-9 rounded-xl bg-red-50 text-red-600 flex items-center justify-center border border-red-200">
-                    <FileText className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-[#0f172a]">
-                      {uploadedFile ? uploadedFile.name : 'No PDF Report Attached'}
-                    </h4>
-                    <p className="text-[11px] text-slate-500">
-                      Undergraduate Assignment Deliverable · {uploadedFile ? uploadedFile.sizeFormatted : '0 KB'}
-                    </p>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={triggerPdfPicker}
-                  className="px-3.5 py-1.5 rounded-xl bg-[#ede9fe] hover:bg-[#ddd6fe] text-[#493ee5] font-bold text-xs flex items-center gap-1.5 cursor-pointer transition-colors border border-[#635bff]/20"
-                >
-                  <Upload className="w-3.5 h-3.5" />
-                  <span>{isExtractingPdf ? 'Extracting...' : 'Upload Replacement PDF'}</span>
-                </button>
-              </div>
-
+          {/* ----------------------------------------------------------------- */}
+          {/* RECHARTS BAR CHART: Visualizing Student Progress Scores Over Time */}
+          {/* ----------------------------------------------------------------- */}
+          <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <div className="flex items-center justify-between text-xs font-semibold text-slate-700 mb-1.5">
-                  <span>Document Content & Requirement Analysis:</span>
-                  <span className="text-[11px] text-slate-400">
-                    {uploadedFile ? `${uploadedFile.content.split('\n').length} lines · Parsed via NIBM Document Ingress` : 'No file'}
-                  </span>
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-[#ede9fe] text-[#635bff] flex items-center justify-center">
+                    <BarChart3 className="w-4 h-4" />
+                  </div>
+                  <h3 className="text-sm font-bold text-[#0f172a] font-display">
+                    Simulation Progress & Score History
+                  </h3>
                 </div>
-                <textarea
-                  value={uploadedFile ? uploadedFile.content : ''}
-                  onChange={(e) => {
-                    if (uploadedFile) {
-                      setUploadedFile({
-                        ...uploadedFile,
-                        content: e.target.value,
-                      });
-                    }
-                  }}
-                  placeholder="Attach a PDF report to view and edit its extracted content here..."
-                  rows={16}
-                  className="w-full text-xs font-mono p-3.5 rounded-xl border border-slate-300 bg-slate-50 text-slate-800 focus:outline-none focus:border-[#635bff] leading-relaxed"
-                />
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Visualizing performance benchmarks across completed milestone assessments
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-xs bg-[#635bff]"></span>
+                  <span className="text-slate-600 font-medium">Overall Score</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-xs bg-[#493ee5]"></span>
+                  <span className="text-slate-600 font-medium">Analytical Rigor</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-xs bg-[#a78bfa]"></span>
+                  <span className="text-slate-600 font-medium">Communication</span>
+                </div>
               </div>
             </div>
-          )}
 
-          {/* Implementation Rationale & Concurrency Trade-Offs (Matches screen.png) */}
-          <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-[#0f172a] uppercase tracking-wider">
-                <FileCode className="w-4 h-4 text-[#635bff]" />
-                <span>IMPLEMENTATION RATIONALE & CONCURRENCY TRADE-OFFS</span>
-              </div>
-              <span className="text-[11px] text-slate-400">Optional notes for AI & Peer Reviewer</span>
-            </div>
-
-            <textarea
-              value={rationaleNotes}
-              onChange={(e) => setRationaleNotes(e.target.value)}
-              placeholder="Explain your Redis TTL strategy, how deadlocks are prevented if an exception occurs in ledgerQueue.dispatch(), and trade-offs made between strong idempotency vs latency..."
-              rows={3}
-              className="w-full text-xs p-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-800 focus:outline-none focus:border-[#635bff] leading-relaxed"
-            />
-
-            <div className="flex items-center justify-between text-[11px] text-slate-400">
-              <span>Markdown supported (code blocks, bolding)</span>
-              <span>Auto-saved 2s ago</span>
+            {/* Recharts Bar Chart Container */}
+            <div className="w-full h-56 pt-2">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={progressScores} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis
+                    dataKey="shortName"
+                    tick={{ fill: '#64748b', fontSize: 11 }}
+                    axisLine={{ stroke: '#e2e8f0' }}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    domain={[0, 100]}
+                    tick={{ fill: '#64748b', fontSize: 11 }}
+                    axisLine={{ stroke: '#e2e8f0' }}
+                    tickLine={false}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#0f172a',
+                      borderColor: '#1e293b',
+                      borderRadius: '12px',
+                      color: '#ffffff',
+                      fontSize: '11px',
+                    }}
+                    cursor={{ fill: '#ede9fe', opacity: 0.3 }}
+                  />
+                  <Bar dataKey="overallScore" name="Overall Score" fill="#635bff" radius={[5, 5, 0, 0]} maxBarSize={28} />
+                  <Bar dataKey="analyticalScore" name="Analytical Rigor" fill="#493ee5" radius={[5, 5, 0, 0]} maxBarSize={28} />
+                  <Bar dataKey="communicationScore" name="Communication" fill="#a78bfa" radius={[5, 5, 0, 0]} maxBarSize={28} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           </div>
 
-          {/* ------------------------------------------------------------------- */}
-          {/* REQUIREMENT 1: ATTACHED PDF REPORT CARD (Matches screen.png exactly) */}
-          {/* ------------------------------------------------------------------- */}
-          {uploadedFile ? (
-            <div className="bg-white rounded-2xl p-3 sm:p-3.5 border border-slate-200 shadow-xs flex flex-wrap items-center justify-between gap-3 animate-in fade-in duration-150">
-              <div className="flex items-center gap-3">
-                {/* Red PDF Icon */}
-                <div className="w-8 h-8 rounded-lg bg-red-50 text-red-500 border border-red-200 flex items-center justify-center shrink-0">
-                  <FileText className="w-4 h-4" />
-                </div>
+          {/* ----------------------------------------------------------------- */}
+          {/* UNIFIED SINGLE "TASK SUBMISSION" CONTAINER */}
+          {/* Both Attach PDF Report & Submit Task buttons are directly inside! */}
+          {/* ----------------------------------------------------------------- */}
+          <div className="bg-white rounded-2xl p-5 border-2 border-[#635bff]/25 shadow-sm space-y-4 relative overflow-hidden">
+            {/* Top highlight bar */}
+            <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#493ee5] via-[#635bff] to-[#8b5cf6]" />
 
-                <div className="flex items-center gap-2.5 flex-wrap">
-                  <span className="text-xs font-bold text-[#0f172a] font-mono">
-                    {uploadedFile.name}
-                  </span>
-                  <span className="text-[11px] text-slate-400">
-                    {uploadedFile.sizeFormatted}
-                  </span>
-                  <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-                    <span>Attached Deliverable</span>
-                  </span>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <FileCode className="w-4 h-4 text-[#635bff]" />
+                  <h3 className="text-sm font-bold text-[#0f172a] uppercase tracking-wider font-display">
+                    TASK SUBMISSION
+                  </h3>
                 </div>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Provide your problem-solving rationale or attach a deliverable PDF report for AI evaluation
+                </p>
               </div>
 
               <div className="flex items-center gap-2">
+                <span className={`text-[11px] font-mono px-2 py-0.5 rounded-full border ${
+                  wordCount < 20
+                    ? 'bg-amber-50 text-amber-700 border-amber-200'
+                    : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                }`}>
+                  {wordCount} words {wordCount < 20 ? '(min 20 req.)' : '✓ valid length'}
+                </span>
+              </div>
+            </div>
+
+            {/* Submission Notes Textarea */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-700 block">
+                Submission Notes & Analytical Rationale:
+              </label>
+              <textarea
+                value={submissionText}
+                onChange={(e) => setSubmissionText(e.target.value)}
+                placeholder="Explain your approach, how requirements are satisfied, trade-offs evaluated, and key recommendations..."
+                rows={5}
+                className="w-full text-xs p-3.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-800 focus:outline-none focus:border-[#635bff] focus:bg-white leading-relaxed transition-colors"
+              />
+              <div className="flex items-center justify-between text-[11px] text-slate-400">
+                <span>Anti-Gibberish Engine enforces quality assessment (min 20 words)</span>
+                <span>Auto-saved to session</span>
+              </div>
+            </div>
+
+            {/* Attached Deliverable Sub-Card inside Task Submission */}
+            <div className="pt-1">
+              <label className="text-xs font-semibold text-slate-700 block mb-1.5">
+                Attached Assignment Deliverable:
+              </label>
+              {uploadedFile ? (
+                <div className="bg-[#faf8ff] rounded-2xl p-3 sm:p-3.5 border border-[#635bff]/25 flex flex-wrap items-center justify-between gap-3 animate-in fade-in duration-150">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-lg bg-red-50 text-red-500 border border-red-200 flex items-center justify-center shrink-0">
+                      <FileText className="w-4 h-4" />
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-bold text-[#0f172a] font-mono">
+                        {uploadedFile.name}
+                      </span>
+                      <span className="text-[11px] text-slate-400">
+                        {uploadedFile.sizeFormatted}
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                        <span>Attached Deliverable</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={triggerPdfPicker}
+                      className="px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-[#493ee5] text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer bg-white"
+                    >
+                      <RefreshCw className="w-3 h-3 text-[#635bff]" />
+                      <span>Replace PDF</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleRemoveAttachedPdf}
+                      title="Remove attached PDF"
+                      className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-slate-50 rounded-2xl p-3 border border-dashed border-slate-300 flex items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2 text-slate-600">
+                    <Paperclip className="w-4 h-4 text-[#635bff]" />
+                    <span>No PDF deliverable attached. You can attach a PDF report or submit notes directly.</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={triggerPdfPicker}
+                    className="text-[#635bff] hover:text-[#493ee5] font-bold text-xs underline cursor-pointer"
+                  >
+                    + Attach PDF Report
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Action Buttons directly inside this single TASK SUBMISSION container */}
+            <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                {/* Attach PDF Report Button */}
                 <button
                   type="button"
                   onClick={triggerPdfPicker}
-                  className="px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-[#493ee5] text-xs font-semibold transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer bg-[#faf8ff]"
+                  className="px-4 py-2.5 rounded-xl border-2 border-[#635bff]/25 bg-[#faf8ff] hover:bg-[#ede9fe] text-[#493ee5] text-xs font-bold transition-all flex items-center gap-2 cursor-pointer shadow-xs"
                 >
-                  <RefreshCw className="w-3 h-3 text-[#635bff]" />
-                  <span>Replace / + Attach New PDF</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleRemoveAttachedPdf}
-                  title="Remove attached PDF (fallback to code submission)"
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <FileText className="w-4 h-4 text-[#635bff]" />
+                  <span>{uploadedFile ? 'Replace / Attach PDF Report' : '+ Attach PDF Report'}</span>
                 </button>
               </div>
-            </div>
-          ) : (
-            /* Prompt when no PDF is attached */
-            <div className="bg-[#faf8ff] rounded-2xl p-3 border border-dashed border-[#635bff]/30 flex items-center justify-between gap-3 text-xs">
-              <div className="flex items-center gap-2 text-slate-600">
-                <Paperclip className="w-4 h-4 text-[#635bff]" />
-                <span>No PDF report attached. AI Evaluator will assess code in <code className="font-mono text-[#635bff]">{activeFile}.ts</code>.</span>
-              </div>
-              <button
-                type="button"
-                onClick={triggerPdfPicker}
-                className="text-[#635bff] hover:text-[#493ee5] font-bold text-xs underline cursor-pointer"
-              >
-                + Attach PDF Report
-              </button>
-            </div>
-          )}
 
-          {/* Bottom Action Bar (Matches screen.png exactly) */}
-          <div className="bg-white rounded-2xl p-4 border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-3">
-            {/* Left: Reviewer Profile */}
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-[#ede9fe] text-[#635bff] flex items-center justify-center font-bold text-xs">
-                SJ
-              </div>
-              <div>
-                <div className="text-xs font-bold text-[#0f172a]">
-                  Sarah Jenkins <span className="text-[10px] font-semibold text-slate-400">Simulated Reviewer</span>
-                </div>
-                <div className="text-[11px] text-slate-500">
-                  Principal Platform Engineer · Dublin Staff Core
-                </div>
-              </div>
-            </div>
-
-            {/* Right Buttons: Re-run Unit Tests + Attach PDF Report + Submit Task to AI Evaluator */}
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <button
-                type="button"
-                onClick={handleRunTests}
-                className="px-3.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer"
-              >
-                <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
-                <span>Re-run Unit Tests</span>
-              </button>
-
-              {/* + Attach PDF Report Button */}
-              <button
-                type="button"
-                onClick={triggerPdfPicker}
-                className="px-3.5 py-2 rounded-xl border border-[#635bff]/30 bg-[#faf8ff] hover:bg-[#ede9fe] text-[#493ee5] text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
-              >
-                <FileText className="w-3.5 h-3.5 text-[#635bff]" />
-                <span>+ Attach PDF Report</span>
-              </button>
-
-              {/* ACTION: Submit Task to AI Evaluator */}
+              {/* Submit Task to AI Evaluator Button */}
               <button
                 type="button"
                 onClick={handleSubmitEvaluation}
                 disabled={isEvaluating}
-                className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#493ee5] to-[#635bff] hover:from-[#3e34c9] hover:to-[#5248e5] text-white text-xs font-bold transition-all shadow-md shadow-[#635bff]/25 flex items-center gap-2 disabled:opacity-50 cursor-pointer"
+                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#493ee5] to-[#635bff] hover:from-[#3e34c9] hover:to-[#5248e5] text-white text-xs font-bold transition-all shadow-md shadow-[#635bff]/25 flex items-center gap-2 disabled:opacity-50 cursor-pointer"
               >
                 {isEvaluating ? (
                   <>
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <RefreshCw className="w-4 h-4 animate-spin" />
                     <span>AI is evaluating...</span>
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-3.5 h-3.5 fill-white" />
+                    <Sparkles className="w-4 h-4 fill-white" />
                     <span>Submit Task to AI Evaluator</span>
                   </>
                 )}

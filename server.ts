@@ -223,10 +223,58 @@ function buildFallbackSearchAndGenerate(query: string): SearchAndGenerateRespons
   };
 }
 
+// Anti-Gibberish validation rule:
+// If the text is blank, less than 20 words, or contains repetitive gibberish (e.g., 'efefef'),
+// immediately give an overall score of 10/100 and return feedback 'Invalid submission or gibberish detected'.
+function checkIsGibberishOrInvalid(rawText: string): boolean {
+  if (!rawText || !rawText.trim()) return true;
+
+  const words = rawText
+    .replace(/[#*`_\[\]()\-]/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter((w) => w.length > 0);
+
+  // 1. Less than 20 words
+  if (words.length < 20) {
+    return true;
+  }
+
+  // 2. Check for repetitive characters / pattern gibberish (e.g. 'efefef', 'aaaaaa', 'asdfasdfasdf')
+  const clean = rawText.replace(/\s+/g, '').toLowerCase();
+  const repetitivePatternRegex = /([a-z0-9]{1,4})\1{4,}/i;
+  if (repetitivePatternRegex.test(clean)) {
+    return true;
+  }
+
+  // 3. Check unique words ratio
+  const uniqueWords = new Set(words.map((w) => w.toLowerCase()));
+  if (uniqueWords.size < 6 && words.length >= 20) {
+    return true;
+  }
+
+  return false;
+}
+
 function buildFallbackEvaluation(req: EvaluateSubmissionActionRequest): EvaluateSubmissionResponse {
-  const content = (req.student_submission || '').toLowerCase();
+  const content = req.student_submission || '';
+
+  // Enforce Anti-Gibberish Rule
+  if (checkIsGibberishOrInvalid(content)) {
+    return {
+      action_type: 'evaluate_submission_response',
+      overall_score: 10,
+      technical_or_analytical_score: 10,
+      technical_accuracy_score: 10,
+      cultural_fit_and_communication_score: 10,
+      detailed_feedback: 'Invalid submission or gibberish detected.',
+      hr_dashboard_summary: 'Submission rejected: Invalid submission or gibberish detected.',
+    };
+  }
+
+  const lowerContent = content.toLowerCase();
   const timeTaken = req.time_taken_mins || 75;
-  const isPdf = req.submission_type === 'pdf_document' || content.includes('requirements') || content.includes('stakeholder') || content.includes('bpmn') || content.includes('use case');
+  const isPdf = req.submission_type === 'pdf_document' || lowerContent.includes('requirements') || lowerContent.includes('stakeholder') || lowerContent.includes('bpmn') || lowerContent.includes('use case');
 
   let analyticalOrTechScore = 82;
   let cultureScore = 80;
@@ -450,34 +498,48 @@ Discover company details and generate the simulation task now.`;
 // ACTION 3: evaluate_submission
 async function handleEvaluateSubmission(req: EvaluateSubmissionActionRequest): Promise<EvaluateSubmissionResponse> {
   const subType = req.submission_type === 'pdf_document' ? 'pdf_document' : 'code';
+  const submissionContent = req.student_submission || '';
+
+  // 1. STRICT ANTI-GIBBERISH RULE (Immediate deterministic enforcement)
+  if (checkIsGibberishOrInvalid(submissionContent)) {
+    return {
+      action_type: 'evaluate_submission_response',
+      overall_score: 10,
+      technical_or_analytical_score: 10,
+      technical_accuracy_score: 10,
+      cultural_fit_and_communication_score: 10,
+      detailed_feedback: 'Invalid submission or gibberish detected.',
+      hr_dashboard_summary: 'Submission rejected: Invalid submission or gibberish detected.',
+    };
+  }
 
   if (ai) {
     try {
       const isPdf = subType === 'pdf_document';
       const systemPrompt = `You are the core AI Engine for the "AI-Driven Virtual Internship & Industry Simulation Platform". You act as a Virtual Technical Manager, Business Analysis Lead, and Institutional HR Evaluator for IT undergraduates.
 
-EVALUATION PROTOCOL:
-The submission_type is "${subType}".
+STRICT GUIDELINES:
+1. When evaluating a code or PDF submission (submission_type: "${subType}"), return ONLY a valid JSON object.
+2. DO NOT wrap the JSON in \`\`\`json ... \`\`\` markdown blocks or any conversational text.
+3. The JSON must strictly match this structure:
+{
+  "action_type": "evaluate_submission_response",
+  "overall_score": 85,
+  "technical_or_analytical_score": 90,
+  "cultural_fit_and_communication_score": 80,
+  "detailed_feedback": "Your evaluation details here...",
+  "hr_dashboard_summary": "Summary for HR dashboard here..."
+}
 
-${isPdf ? `CRITICAL EVALUATION CRITERIA FOR UPLOADED PDF REPORT:
+CRITICAL ANTI-GIBBERISH RULE:
+Evaluate the ACTUAL text content of the submission. If the text is blank, less than 20 words, or contains repetitive gibberish (e.g., 'efefef'), you MUST ignore any 'tests passed' flags, immediately give an overall score of 10/100, and return the feedback 'Invalid submission or gibberish detected'.
+
+${isPdf ? `EVALUATION CRITERIA FOR UPLOADED PDF REPORT:
 Instead of checking code syntax, evaluate the uploaded PDF report based strictly on:
 1. Analytical thinking and problem-solving approach.
 2. Business logic and technical requirement coverage.
-3. Professional formatting, structure, and clarity of the report.
-Review the PDF content thoroughly and provide specific, actionable feedback.` : `CRITICAL EVALUATION CRITERIA FOR CODE SUBMISSION:
-Evaluate code syntax, modular architecture, distributed locking/idempotency, and error handling.`}
-
-JSON OUTPUT SPECIFICATION:
-You must ALWAYS respond in strict JSON format. Do not include markdown formatting tags like \`\`\`json or any conversational text outside the JSON object.
-Return JSON with this exact schema:
-{
-  "action_type": "evaluate_submission_response",
-  "overall_score": 88,
-  "technical_or_analytical_score": 90,
-  "cultural_fit_and_communication_score": 85,
-  "detailed_feedback": "What was done right:\n• ...\n\nWhat needs improvement:\n• ...",
-  "hr_dashboard_summary": "Two-sentence summary for the NIBM Admin/HR Dashboard indicating student industry readiness."
-}`;
+3. Professional formatting, structure, and clarity of the report.` : `EVALUATION CRITERIA FOR CODE SUBMISSION:
+Evaluate modular architecture, error handling, edge cases, and implementation rationale.`}`;
 
       const userPrompt = `action: evaluate_submission
 task_title: ${req.task_title}
@@ -485,10 +547,10 @@ submission_type: ${subType}
 time_taken_mins: ${req.time_taken_mins || 30}
 student_submission:
 """
-${req.student_submission}
+${submissionContent}
 """
 
-Evaluate this ${isPdf ? 'PDF assignment report' : 'code submission'} based strictly on the required criteria now.`;
+Evaluate this submission now and return pure raw JSON only.`;
 
       const response = await ai.models.generateContent({
         model: 'gemini-3.8-flash',
@@ -518,7 +580,12 @@ Evaluate this ${isPdf ? 'PDF assignment report' : 'code submission'} based stric
         },
       });
 
-      const parsed = JSON.parse(response.text || '{}');
+      const cleanedText = (response.text || '{}')
+        .replace(/```json/gi, '')
+        .replace(/```/g, '')
+        .trim();
+
+      const parsed = JSON.parse(cleanedText);
       if (typeof parsed.overall_score === 'number') {
         parsed.action_type = 'evaluate_submission_response';
         parsed.technical_accuracy_score = parsed.technical_or_analytical_score; // Alias for backward compatibility
