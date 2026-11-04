@@ -62,6 +62,9 @@ export interface CompanyPreset {
   logoBg?: string;
   logoText?: string;
   defaultSubmissionType?: 'code' | 'pdf_document';
+  enterpriseSoftwareTools?: string[];
+  tasks?: TaskDeliverable[];
+  onboardingBriefing?: string;
 }
 
 export interface CompletedSimulation {

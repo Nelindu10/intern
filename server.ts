@@ -116,42 +116,46 @@ function buildFallbackTask(
     lowerDomain.includes('product management') ||
     lowerDomain.includes('bpmn');
 
-  let title = `Implement Production Resiliency Module for ${companyName}`;
-  let scenario = `At ${companyName}, our platform handles mission-critical traffic utilizing ${techOrDomain}. Intermittent downstream failures and sudden bursts require a hardened component that validates data integrity, handles asynchronous boundaries, and enforces high availability under our ${culture} engineering principles.`;
-  let timezone = 'UK Shift: 2:00 PM - 10:00 PM IST (Dublin & London Core Hours)';
-  let managerTone = `[Manager Persona Tone: ${culture}] Welcome to Sprint Cycle 4! We need a hardened service layer in ${techOrDomain}. Review the specifications carefully, protect concurrency lifespans, and make sure error handling meets our ${culture} quality bar. Keep code clean and ping me if you hit any blockers.`;
-  let deliverables = `Specify Deliverable: Submit Code Implementation with unit tests and concurrency rationale notes.`;
+  let title = `Business Requirements Specification (BRS) & Process Optimization for ${companyName}`;
+  let scenario = `At ${companyName}, cross-functional teams require a structured business analysis deliverable defining functional requirements, stakeholder workflows, and operational KPIs utilizing ${techOrDomain}. In alignment with our ${culture} principles, ensure complete requirement traceability and clear exception handling.`;
+  let timezone = 'Global Shift: 1:30 PM - 9:30 PM IST (Regional Strategy Hub)';
+  let managerTone = `Welcome to Sprint Cycle 4 at ${companyName}! Our cross-functional teams need a clear, structured Business Requirements Specification (BRS). Review the problem scope, map end-to-end user workflows using ${techOrDomain}, and ensure requirement traceability links directly to business impact.`;
+  let deliverables = `Submit a Business Requirements Report (PDF) covering: 1. Executive Problem Definition; 2. Stakeholder RACI Matrix; 3. Functional & Non-Functional Requirements; 4. Process Workflow Mapping; 5. Acceptance Criteria.`;
 
-  if (isBusinessAnalysis) {
-    title = `Enterprise Business Requirements Specification (BRS) & Traceability Matrix for ${companyName}`;
-    scenario = `At ${companyName}, cross-functional stakeholders need a rigorous Business Analysis document defining the functional requirements, BPMN workflow, UML use-case diagrams, and acceptance criteria for our upcoming digital transformation initiative. In line with our ${culture} culture, clarity, user empathy, and requirement traceability are paramount.`;
-    timezone = 'Global Agile Sync: 1:30 PM - 9:30 PM IST (London / Colombo Sync)';
-    managerTone = `[Business Analysis Lead Tone: ${culture}] Welcome to Sprint Planning! Our product owners and engineering leads need crisp, unambiguous requirements. Ensure your functional requirements link directly to business value, identify edge-case exceptions in the user journey, and present structured acceptance criteria following Given-When-Then syntax.`;
-    deliverables = `Specify Deliverable: Submit a PDF Report (or formatted Markdown specification) containing: 1. Executive Summary & Problem Statement; 2. Stakeholder RACI Matrix; 3. Functional & Non-Functional Requirements (MoSCoW prioritized); 4. UML Use-Case & BPMN Activity Workflow; 5. Gherkin Acceptance Criteria.`;
-  } else if (
+  if (
     lowerComp.includes('stripe') ||
-    lowerComp.includes('fintech') ||
-    lowerComp.includes('apex') ||
     lowerComp.includes('pay') ||
     lowerComp.includes('bank')
   ) {
-    title = `Hardened Idempotent Webhook Ingestion Layer`;
-    scenario = `The Dublin Core Platform team needs a hardened, idempotent webhook ingestion layer for ${companyName}. Downstream billing retries during intermittent network drops have caused duplicate transaction credits in test accounts. Review the spec, protect the Redis lock release against zombie worker lifespans, and ensure SHA256 header validation passes our test matrix.`;
+    title = `Enterprise Multi-Currency Subscription Invoicing & Dunning Automation`;
+    scenario = `At ${companyName}, our enterprise billing division manages multi-currency recurring invoicing across global corporate accounts. Uncoordinated payment retry schedules and customer decline handling trigger high churn and manual reconciliation overhead. Develop a comprehensive Business Requirements Specification (BRS), user journey swimlane diagrams, and integration data mappings between ${techOrDomain}.`;
     timezone = 'UK Shift: 2:00 PM - 10:00 PM IST (Dublin HQ · UTC+1)';
-    managerTone = `[Manager Tone: FinTech Resiliency & Ingestion] Welcome to Sprint Cycle 4! The Dublin Core Platform team needs a hardened, idempotent webhook ingestion layer. Downstream billing retries during intermittent network drops have caused duplicate transaction credits in test accounts. Review the spec, protect the Redis lock release against zombie worker lifespans, and ensure SHA256 header validation passes our test matrix.`;
-    deliverables = `Specify Deliverable: Submit Code Implementation containing: 1. Distributed Redis Locking (SET NX EX with 10,000ms TTL); 2. HMAC-SHA256 Signature Verification against raw byte buffers; 3. Replay detection handling; 4. Jest test coverage suite.`;
+    managerTone = `Welcome to Sprint Cycle 4 at ${companyName}! We are modernizing the multi-currency subscription and invoice automation workflow for EMEA corporate clients. Disputed transactions and uncoordinated retry attempts currently create revenue leakage and manual reconciliation overhead. We need a comprehensive Business Requirements Specification (BRS), stakeholder traceability matrix, and automated dunning workflow using ${techOrDomain}.`;
+    deliverables = `Submit an Assignment Report / BRS covering: 1. Executive Summary & Problem Scope; 2. Stakeholder RACI Matrix; 3. Functional Requirements for Multi-Currency Dunning Automation; 4. Process Workflow (BPMN / Swimlane); 5. Given-When-Then Acceptance Criteria.`;
   } else if (lowerComp.includes('health') || lowerComp.includes('care') || lowerCulture.includes('hipaa')) {
-    title = `HIPAA-Compliant Patient Telemetry Sanitization & Masking`;
-    scenario = `At ${companyName}, patient clinical data must be scrubbed before hitting analytical queues. Federal regulations strictly penalize unmasked Medical Record Numbers (MRN) or SSNs. Build a fast, streaming sanitizer in ${techOrDomain} that cryptographically anonymizes telemetry while generating audit trails.`;
+    title = `HIPAA-Compliant Patient Intake & EHR Interoperability Gateway`;
+    scenario = `At ${companyName}, clinical ambulatory centers require an automated patient intake and insurance pre-authorization process. Unsynchronized patient demographics between check-in kiosks and Epic EHR cause clinic backlogs and insurance claim denials. Define functional data flows, FHIR API mappings, and HIPAA security controls.`;
     timezone = 'US Eastern Shift: 6:30 PM - 2:30 AM IST (Boston HQ)';
-    managerTone = `[Manager Tone: Strict Compliance & Regulatory Rigor] Attention to detail is non-negotiable here. A single unmasked identifier violates HIPAA protocols. Follow defensive engineering in ${techOrDomain}, write comprehensive unit tests, and document every redaction rule.`;
-    deliverables = `Specify Deliverable: Submit Code Implementation containing telemetry filters, cryptographic masking functions, and audit logging verification.`;
+    managerTone = `Welcome to ${companyName}! Patient data confidentiality is paramount under federal HIPAA regulations. Your intake workflow must ensure zero unmasked PHI leaks while reducing patient lobby wait times. Structure complete functional requirements, FHIR data resource maps, and patient journey diagrams using ${techOrDomain}.`;
+    deliverables = `Submit a Clinical Systems BRS Deliverable containing: 1. Clinical Workflow Diagram; 2. FHIR Resource Data Mapping; 3. HIPAA Access Control Matrix; 4. Acceptance Criteria.`;
+  } else if (lowerComp.includes('ifs') || lowerComp.includes('supply') || lowerComp.includes('erp') || lowerComp.includes('logistics')) {
+    title = `Multi-Facility Automated Inventory Replenishment & Procurement BRS`;
+    scenario = `At ${companyName}, multi-channel manufacturing distribution hubs experience stockout delays between regional warehouses. Formulate functional requirements for automated stock reordering, supplier procurement PO generation, and delivery tracking in ${techOrDomain}.`;
+    timezone = 'IST Shift: 9:00 AM - 5:30 PM IST (Colombo Tech Hub)';
+    managerTone = `Welcome to ${companyName}! Stock discrepancy delays between checkout and warehouse distribution nodes cause supply chain disruptions. Your assignment is to structure a comprehensive Business Requirements Specification (BRS), design BPMN 2.0 process workflows, and formulate Gherkin acceptance criteria using ${techOrDomain}.`;
+    deliverables = `Submit a comprehensive BRS Deliverable containing: 1. Problem Scope; 2. Stakeholder Matrix; 3. Functional Requirements (MoSCoW prioritized); 4. BPMN 2.0 Activity Workflow; 5. Acceptance Criteria.`;
+  } else if (lowerComp.includes('apex') || lowerComp.includes('settle') || lowerComp.includes('trade') || lowerComp.includes('clearing')) {
+    title = `T+1 Settlement Cycle Trade Reconciliation & Compliance Process`;
+    scenario = `At ${companyName}, global financial regulations mandate trade matching and settlement within 24 hours (T+1). Outline functional requirements for real-time post-trade allocation, exception identification for mismatched tickets, and regulatory audit compliance reporting using ${techOrDomain}.`;
+    timezone = 'UK Shift: 2:00 PM - 10:00 PM IST (London HQ · GMT)';
+    managerTone = `Welcome to ${companyName}! As part of our London operations group, you will analyze high-value trade settlement validation and regulatory reporting rules under T+1 settlement cycles. We need detailed functional user stories, risk impact assessments, and audit trail specifications using ${techOrDomain}.`;
+    deliverables = `Submit a Capital Markets Operations BRS covering: 1. Trade Lifecycle Swimlane Diagram; 2. Exception Auto-Repair Logic; 3. Regulatory Compliance Data Matrix; 4. Acceptance Criteria.`;
   } else if (lowerComp.includes('ai') || lowerComp.includes('openai') || lowerComp.includes('anthropic') || lowerComp.includes('scale')) {
-    title = `Streaming Markdown Parser & Real-Time Token Latency Engine`;
-    scenario = `At ${companyName}, user-facing generative interactions require sub-50ms latency chunk rendering. Network jitter causes UI stutter and layout reflow. Construct an asynchronous token stream buffer in ${techOrDomain} with live tokens-per-second monitoring and backpressure regulation.`;
-    timezone = 'US Pacific Shift: 9:30 PM - 5:30 AM IST (SF HQ)';
-    managerTone = `[Manager Tone: Casual Hacker-House & Ultra-Fast Iteration] Yo! We need this streaming pipeline to feel completely instantaneous. Avoid unnecessary re-renders, fail gracefully on abrupt socket disconnects, and keep code modular. Ship fast and drop a Loom demo when it passes tests!`;
-    deliverables = `Specify Deliverable: Submit Code Implementation with stream consumer buffers and benchmark metrics.`;
+    title = `Enterprise Support Agent Human-in-the-Loop Escalation Specification`;
+    scenario = `At ${companyName}, enterprise partners deploying autonomous customer support agents need clear operational boundaries. Formulate functional specifications for intent classification confidence scoring, automated transfer to human support tiers, and agent handoff context packaging using ${techOrDomain}.`;
+    timezone = 'PST Shift: 9:30 PM - 5:30 AM IST (San Francisco HQ)';
+    managerTone = `Welcome to ${companyName}! We are deploying customer support automation agents for Fortune 500 enterprise partners. We need you to define functional acceptance criteria for LLM agent fallbacks, map human-in-the-loop escalation workflows, and document SLA monitoring requirements.`;
+    deliverables = `Submit an AI Product Specification covering: 1. Intent Routing & Escalation Decision Tree; 2. Confidence Score Threshold Table; 3. Context Preservation Data Schema; 4. Acceptance Criteria.`;
   }
 
   return {
@@ -173,34 +177,34 @@ function buildFallbackSearchAndGenerate(query: string): SearchAndGenerateRespons
   const lower = cleanQuery.toLowerCase();
 
   let discoveredCompany = cleanQuery;
-  let detectedStack = 'TypeScript, Node.js, Express, PostgreSQL';
-  let detectedCulture = 'Agile, high-velocity engineering with emphasis on scalable distributed systems';
+  let detectedStack = 'Salesforce CRM, Jira Service Management, Microsoft Visio, Tableau, SQL';
+  let detectedCulture = 'Agile delivery, cross-functional collaboration, customer journey mapping, and requirement traceability';
   let timezone = 'US Shift: 6:00 PM - 2:00 AM IST (Global Remote)';
 
   if (lower.includes('mckinsey') || lower.includes('accenture') || lower.includes('deloitte') || lower.includes('gartner')) {
     discoveredCompany = cleanQuery;
-    detectedStack = 'Business Analysis, Agile Product Management, BPMN 2.0, Jira, UML';
+    detectedStack = 'Business Analysis, Agile Product Management, BPMN 2.0, Jira, UML 2.5';
     detectedCulture = 'Client-first management consulting, structured analytical frameworks, and executive stakeholder communication';
     timezone = 'Global Shift: 1:00 PM - 9:00 PM IST (Strategy Hub)';
   } else if (lower.includes('airbnb')) {
     discoveredCompany = 'Airbnb';
-    detectedStack = 'React, TypeScript, GraphQL, Kotlin, MySQL';
-    detectedCulture = 'Design-led, highly empathetic, component architecture rigor and global localized reliability';
+    detectedStack = 'Airbnb Host Platform, Zendesk Enterprise, Figma, Tableau, Jira Product Discovery';
+    detectedCulture = 'Design-led, highly empathetic, localized community trust, and structured user journey mapping';
     timezone = 'PST Shift: 9:30 PM - 5:30 AM IST (San Francisco HQ)';
   } else if (lower.includes('uber')) {
     discoveredCompany = 'Uber Technologies';
-    detectedStack = 'Go, Java, Kafka, Redis, Microservices';
-    detectedCulture = 'High-concurrency, low-latency real-time geospatial dispatch and strict 99.999% SLA resilience';
+    detectedStack = 'Uber Fleet Portal, Salesforce Service Cloud, Confluence, Jira, SQL Analytics';
+    detectedCulture = 'Operational efficiency, real-time dispatch logistics, and rigorous SLA compliance';
     timezone = 'PST Shift: 9:30 PM - 5:30 AM IST (San Francisco HQ)';
   } else if (lower.includes('shopify')) {
     discoveredCompany = 'Shopify';
-    detectedStack = 'Ruby on Rails, React, TypeScript, GraphQL, Redis';
-    detectedCulture = 'Merchant-first, radical candor, asynchronous documentation and resilient flash-sale checkout scaling';
+    detectedStack = 'Shopify Merchant Admin, NetSuite ERP, Figma, Lucidchart, Snowflake SQL';
+    detectedCulture = 'Merchant-first empathy, asynchronous documentation, and scalable commerce checkout workflows';
     timezone = 'EST Shift: 6:30 PM - 2:30 AM IST (Ottawa / Global)';
   } else if (lower.includes('wso2') || lower.includes('virtusa') || lower.includes('ifs') || lower.includes('sysco')) {
     discoveredCompany = cleanQuery.toUpperCase();
-    detectedStack = 'Enterprise Java, Microservices, Business Analysis, Agile Scrum';
-    detectedCulture = 'Global enterprise delivery, client SLA focus, structured agile sprints and rigorous code reviews';
+    detectedStack = 'Enterprise Cloud ERP, Jira Agile, BPMN 2.0, Microsoft Power BI, SQL';
+    detectedCulture = 'Global enterprise delivery, client SLA focus, structured agile sprints, and requirement traceability';
     timezone = 'IST Shift: 9:00 AM - 6:00 PM IST (Colombo Tech Hub)';
   }
 
