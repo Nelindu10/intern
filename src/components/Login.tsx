@@ -25,22 +25,11 @@ export interface UserSession {
   plan?: PricingPlan;
 }
 
-export interface RegisteredStudent {
-  name: string;
-  email: string;
-  password: string;
-  role: 'student';
-  selectedPlan: PricingPlan;
-  registeredAt: string;
-}
-
 interface LoginProps {
   onLogin: (session: UserSession) => void;
 }
 
-const LOCAL_STORAGE_STUDENTS_KEY = 'registeredStudents';
-
-// 5 hardcoded valid promo codes for beta testers to unlock the Pro Plan
+// 5 hardcoded valid promo codes for beta testers to unlock the Pro Plan (Hidden from UI)
 export const VALID_PROMO_CODES = [
   'NIBM-VIP',
   'PRO-ACCESS',
@@ -57,6 +46,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Default to 'basic' (Free Plan) unless promo code upgraded it
   const [selectedPlan, setSelectedPlan] = useState<PricingPlan>(() => {
@@ -88,7 +78,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  // Handle promo code application: validates against the 5 valid codes
+  // Handle promo code application: validates against the 5 valid codes (codes hidden from UI)
   const handleApplyPromo = (e: React.FormEvent) => {
     e.preventDefault();
     setPromoMessage(null);
@@ -107,30 +97,30 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
       localStorage.setItem('selectedPlan', 'pro');
       setPromoMessage({
         type: 'success',
-        text: `Promo code "${clean}" verified! Session upgraded to Pro Plan.`,
+        text: 'Promo code applied! Session upgraded to Pro Plan.',
       });
     } else {
       setPromoMessage({
         type: 'error',
-        text: 'Invalid promo code. Valid beta codes: NIBM-VIP, PRO-ACCESS, BETA-TESTER, VIP-PASS, FRIEND-CODE.',
+        text: 'Invalid promo code. Please check your code and try again.',
       });
     }
   };
 
-  // Handle form submission (Sign In or Sign Up)
-  const handleSubmit = (e: React.FormEvent) => {
+  // ---------------------------------------------------------------------------
+  // REAL MONGODB AUTHENTICATION FLOW
+  // ---------------------------------------------------------------------------
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
     setSuccessMessage(null);
+    setIsSubmitting(true);
 
     const trimmedEmail = email.trim().toLowerCase();
     const trimmedPassword = password.trim();
     const trimmedName = name.trim();
 
-    // -------------------------------------------------------------
-    // 2. HARDCODED ADMIN ACCESS CONTROL
-    // Exact credentials: vipadmin@gmail.com / 123
-    // -------------------------------------------------------------
+    // 1. HARDCODED ADMIN EXCEPTION: vipadmin@gmail.com / 123 (bypasses standard DB checks)
     if (trimmedEmail === 'vipadmin@gmail.com' && trimmedPassword === '123') {
       const adminSession: UserSession = {
         email: 'vipadmin@gmail.com',
@@ -140,10 +130,11 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
       };
       localStorage.setItem('selectedPlan', 'premium');
       onLogin(adminSession);
+      setIsSubmitting(false);
       return;
     }
 
-    // Secondary fallback for legacy admin if needed
+    // Secondary fallback admin check
     if (trimmedEmail === 'admin@nibm.lk' && trimmedPassword === 'admin123') {
       const adminSession: UserSession = {
         email: 'admin@nibm.lk',
@@ -153,132 +144,99 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
       };
       localStorage.setItem('selectedPlan', 'premium');
       onLogin(adminSession);
+      setIsSubmitting(false);
       return;
     }
 
     // -------------------------------------------------------------
-    // SIGN UP FLOW: Dynamic registration to localStorage
-    // Any standard student/user is automatically assigned "Basic (Free) Plan"
-    // unless upgraded via a valid promo code.
+    // SIGN UP FLOW: Saves user to MongoDB 'users' collection
+    // On success: Displays success notice & switches to Sign In tab
     // -------------------------------------------------------------
     if (authMode === 'signup') {
       if (!trimmedEmail || !trimmedPassword) {
         setErrorMessage('Please provide both email and password.');
+        setIsSubmitting(false);
         return;
       }
 
       if (trimmedPassword.length < 3) {
         setErrorMessage('Password must be at least 3 characters long.');
+        setIsSubmitting(false);
         return;
       }
 
       try {
-        const storedStr = localStorage.getItem(LOCAL_STORAGE_STUDENTS_KEY);
-        const studentsList: RegisteredStudent[] = storedStr ? JSON.parse(storedStr) : [];
+        const response = await fetch('/api/auth/signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: trimmedEmail,
+            password: trimmedPassword,
+            name: trimmedName || trimmedEmail.split('@')[0],
+            selectedPlan: selectedPlan === 'pro' ? 'pro' : 'basic',
+          }),
+        });
 
-        // Check if user already exists
-        const exists = studentsList.some((s) => s.email.toLowerCase() === trimmedEmail);
+        const data = await response.json();
 
-        if (exists) {
-          setErrorMessage('An account with this email already exists. Please switch to Sign In.');
+        if (!response.ok) {
+          setErrorMessage(data.error || 'Failed to create account.');
+          setIsSubmitting(false);
           return;
         }
 
-        // Assign plan: basic by default, or pro if promo code was successfully applied
-        const assignedPlan: PricingPlan = selectedPlan === 'pro' ? 'pro' : 'basic';
-
-        const newStudent: RegisteredStudent = {
-          name: trimmedName || trimmedEmail.split('@')[0],
-          email: trimmedEmail,
-          password: trimmedPassword,
-          role: 'student',
-          selectedPlan: assignedPlan,
-          registeredAt: new Date().toISOString(),
-        };
-
-        studentsList.push(newStudent);
-        localStorage.setItem(LOCAL_STORAGE_STUDENTS_KEY, JSON.stringify(studentsList));
-        localStorage.setItem('selectedPlan', assignedPlan);
-
-        setSuccessMessage(
-          `Account registered successfully with ${assignedPlan.toUpperCase()} Plan! Entering workspace...`
-        );
-
-        setTimeout(() => {
-          onLogin({
-            email: newStudent.email,
-            role: 'student',
-            name: newStudent.name,
-            plan: assignedPlan,
-          });
-        }, 500);
+        // Show success and switch to Sign In tab as specified in rule 1
+        setSuccessMessage('Account registered successfully! Please Sign In with your credentials.');
+        setPassword('');
+        setAuthMode('signin');
       } catch (err) {
         console.error(err);
-        setErrorMessage('Could not save user registration. Please try again.');
+        setErrorMessage('Could not connect to authentication service. Please try again.');
+      } finally {
+        setIsSubmitting(false);
       }
       return;
     }
 
     // -------------------------------------------------------------
-    // SIGN IN FLOW: Registered student check or auto-enroll standard user
-    // Any standard student logging in gets assigned Basic (Free) Plan by default
-    // (or Pro if they entered a valid promo code).
+    // SIGN IN FLOW: Real MongoDB verification against 'users' collection
+    // If email doesn't exist: strictly blocks access and shows "Account not found. Please Sign Up first."
+    // If password wrong: shows "Incorrect password."
     // -------------------------------------------------------------
     try {
-      const storedStr = localStorage.getItem(LOCAL_STORAGE_STUDENTS_KEY);
-      const studentsList: RegisteredStudent[] = storedStr ? JSON.parse(storedStr) : [];
-
-      const foundStudent = studentsList.find((s) => s.email.toLowerCase() === trimmedEmail);
-
-      if (foundStudent) {
-        if (foundStudent.password !== trimmedPassword) {
-          setErrorMessage('Invalid password for this student account.');
-          return;
-        }
-
-        // If user already applied promo code, honor pro, otherwise student's saved plan or basic
-        const activePlan = selectedPlan === 'pro' ? 'pro' : foundStudent.selectedPlan || 'basic';
-        localStorage.setItem('selectedPlan', activePlan);
-
-        onLogin({
-          email: foundStudent.email,
-          role: 'student',
-          name: foundStudent.name,
-          plan: activePlan,
-        });
-        return;
-      }
-
-      // If user is entering arbitrary valid credentials, allow standard student login with Basic Plan
-      if (trimmedEmail && trimmedPassword) {
-        const studentPlan = selectedPlan === 'pro' ? 'pro' : 'basic';
-        localStorage.setItem('selectedPlan', studentPlan);
-
-        // Store new student for subsequent sign-ins
-        const newStudent: RegisteredStudent = {
-          name: trimmedEmail.split('@')[0],
+      const response = await fetch('/api/auth/signin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           email: trimmedEmail,
           password: trimmedPassword,
-          role: 'student',
-          selectedPlan: studentPlan,
-          registeredAt: new Date().toISOString(),
-        };
-        studentsList.push(newStudent);
-        localStorage.setItem(LOCAL_STORAGE_STUDENTS_KEY, JSON.stringify(studentsList));
+        }),
+      });
 
-        onLogin({
-          email: trimmedEmail,
-          role: 'student',
-          name: trimmedEmail.split('@')[0],
-          plan: studentPlan,
-        });
+      const data = await response.json();
+
+      if (!response.ok) {
+        setErrorMessage(data.error || 'Sign in failed. Please verify your credentials.');
+        setIsSubmitting(false);
         return;
       }
 
-      setErrorMessage('Please enter both your email and password to sign in.');
+      // Success: determine active tier (if promo code was already used, keep pro)
+      const user = data.user;
+      const activePlan = selectedPlan === 'pro' ? 'pro' : user.plan || 'basic';
+      localStorage.setItem('selectedPlan', activePlan);
+
+      onLogin({
+        email: user.email,
+        role: user.role || 'student',
+        name: user.name,
+        plan: activePlan,
+      });
     } catch (err) {
       console.error(err);
-      setErrorMessage('Authentication error. Please try again.');
+      setErrorMessage('Network error during authentication. Please try again.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -303,7 +261,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
           <div className="flex items-center gap-3 sm:gap-6 text-xs font-semibold text-slate-600">
             <span className="text-[#635bff] bg-[#ede9fe] px-3 py-1 rounded-full border border-[#635bff]/20">
-              SaaS Access Gateway
+              MongoDB Cloud Ingress
             </span>
             <div className="hidden sm:flex items-center gap-1.5 text-slate-500 font-normal">
               <GraduationCap className="w-4 h-4 text-[#635bff]" />
@@ -318,7 +276,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
           
           {/* ========================================================================= */}
-          {/* LEFT PANEL: Authentication Card (5 cols) - NO DEMO BUTTONS               */}
+          {/* LEFT PANEL: Authentication Card (5 cols)                                   */}
           {/* ========================================================================= */}
           <div className="lg:col-span-5 bg-white rounded-3xl border border-slate-200 shadow-xl overflow-hidden p-6 sm:p-8 relative">
             {/* Soft background aura */}
@@ -327,7 +285,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
             {/* Portal Badge */}
             <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-[#ede9fe] text-[#493ee5] uppercase tracking-wider mb-3 border border-[#635bff]/20">
               <span className="w-1.5 h-1.5 rounded-full bg-[#635bff]"></span>
-              Secure Authentication
+              Secure Database Authentication
             </div>
 
             <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#0f172a] font-display">
@@ -335,7 +293,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
             </h1>
             <p className="text-xs text-slate-500 mt-1.5">
               {authMode === 'signup'
-                ? 'Register with your student email. Standard accounts start with the Basic (Free) Plan.'
+                ? 'Register with your email to persist your account in MongoDB. Standard accounts start on the Basic Plan.'
                 : 'Enter your account credentials to access company simulations and technical evaluations.'}
             </p>
 
@@ -377,7 +335,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
             {errorMessage && (
               <div className="mt-4 p-3 rounded-xl bg-red-50 border border-red-200 flex items-start gap-2 text-xs text-red-700 animate-in fade-in">
                 <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-                <span className="font-medium">{errorMessage}</span>
+                <span className="font-semibold">{errorMessage}</span>
               </div>
             )}
 
@@ -388,7 +346,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
               </div>
             )}
 
-            {/* Form - Manual Entry Only */}
+            {/* Form - Real Database Authentication */}
             <form onSubmit={handleSubmit} className="space-y-3.5 mt-4">
               {/* Full Name (Sign Up only) */}
               {authMode === 'signup' && (
@@ -472,9 +430,16 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
               {/* Submit Button */}
               <button
                 type="submit"
-                className="w-full py-3 rounded-xl bg-[#635bff] hover:bg-[#5248e5] text-white text-xs font-bold transition-all shadow-md shadow-[#635bff]/25 flex items-center justify-center gap-2 cursor-pointer mt-2"
+                disabled={isSubmitting}
+                className="w-full py-3 rounded-xl bg-[#635bff] hover:bg-[#5248e5] text-white text-xs font-bold transition-all shadow-md shadow-[#635bff]/25 flex items-center justify-center gap-2 cursor-pointer mt-2 disabled:opacity-60"
               >
-                <span>{authMode === 'signup' ? 'Create Account & Enter Platform' : 'Sign In to Workspace'}</span>
+                <span>
+                  {isSubmitting
+                    ? 'Connecting to MongoDB...'
+                    : authMode === 'signup'
+                    ? 'Create Account & Save to Database'
+                    : 'Sign In to Workspace'}
+                </span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </form>
@@ -494,7 +459,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
           </div>
 
           {/* ========================================================================= */}
-          {/* RIGHT PANEL: Pricing Tiers & PROMO CODE SYSTEM FOR PRO PLAN (7 cols)      */}
+          {/* RIGHT PANEL: Pricing Tiers & PROMO CODE SYSTEM (Codes Hidden from UI)     */}
           {/* ========================================================================= */}
           <div className="lg:col-span-7 space-y-4">
             <div>
@@ -509,7 +474,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
               </p>
             </div>
 
-            {/* PROMO CODE REDEMPTION BOX (Primary requirement for Pro plan bypass) */}
+            {/* 2. PROMO CODE REDEMPTION BOX: Codes Completely Hidden from UI */}
             <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-br from-[#f2f3ff] to-[#faf8ff] border-2 border-[#635bff]/30 shadow-sm space-y-2.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-xs font-bold text-[#0f172a]">
@@ -526,7 +491,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   type="text"
                   value={promoCode}
                   onChange={(e) => setPromoCode(e.target.value)}
-                  placeholder="Enter promo code (e.g. NIBM-VIP, PRO-ACCESS, BETA-TESTER)"
+                  placeholder="Enter Promo Code"
                   className="flex-1 text-xs p-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:border-[#635bff] focus:ring-2 focus:ring-[#635bff]/20 uppercase font-mono text-slate-800"
                 />
                 <button
@@ -545,27 +510,13 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   }`}
                 >
                   {promoMessage.type === 'success' ? (
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
                   ) : (
-                    <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                    <AlertCircle className="w-4 h-4 text-red-600" />
                   )}
                   <span>{promoMessage.text}</span>
                 </div>
               )}
-
-              <div className="pt-1 flex flex-wrap gap-1.5 text-[10px] text-slate-500">
-                <span className="font-semibold text-slate-600">Accepted Beta Codes:</span>
-                {VALID_PROMO_CODES.map((code) => (
-                  <button
-                    key={code}
-                    type="button"
-                    onClick={() => setPromoCode(code)}
-                    className="font-mono bg-white px-1.5 py-0.5 rounded border border-slate-200 hover:border-[#635bff] hover:text-[#493ee5] transition-colors cursor-pointer"
-                  >
-                    {code}
-                  </button>
-                ))}
-              </div>
             </div>
 
             {/* 3 Pricing Plan Cards */}
@@ -717,7 +668,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
             <span>National Institute of Business Management (NIBM)</span>
           </div>
           <div className="text-[11px] text-slate-400 font-mono">
-            SaaS Access Control & Automated Progression Engine Active
+            MongoDB User Directory Active · Real Database Authentication
           </div>
         </div>
       </footer>

@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI, Type } from '@google/genai';
+import { connectMongo, findUserByEmail, insertUser } from './src/db/mongo';
 
 dotenv.config();
 
@@ -722,7 +723,122 @@ app.get('/api/engine/status', (req: Request, res: Response) => {
   });
 });
 
+// -------------------------------------------------------------
+// REAL MONGODB AUTHENTICATION API ROUTES ('users' collection)
+// -------------------------------------------------------------
+
+// Sign Up Route: Accepts email & password, saves to 'users' collection
+app.post('/api/auth/signup', async (req: Request, res: Response) => {
+  try {
+    const email = (req.body.email || '').trim().toLowerCase();
+    const password = (req.body.password || '').trim();
+    const name = (req.body.name || '').trim();
+    const selectedPlan = (req.body.selectedPlan || 'basic').trim().toLowerCase();
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required.' });
+    }
+
+    if (password.length < 3) {
+      return res.status(400).json({ error: 'Password must be at least 3 characters.' });
+    }
+
+    // Check if user already exists
+    const existing = await findUserByEmail(email);
+    if (existing) {
+      return res.status(400).json({ error: 'An account with this email already exists. Please Sign In.' });
+    }
+
+    // Save user to 'users' collection
+    const plan = selectedPlan === 'pro' || selectedPlan === 'premium' ? selectedPlan : 'basic';
+    await insertUser({
+      email,
+      password,
+      name: name || email.split('@')[0],
+      role: 'student',
+      selectedPlan: plan,
+      createdAt: new Date(),
+    });
+
+    return res.json({
+      success: true,
+      message: 'Account registered successfully! Please Sign In with your credentials.',
+    });
+  } catch (err: any) {
+    console.error('[Auth API] Signup error:', err);
+    return res.status(500).json({ error: 'Failed to register account. Please try again.' });
+  }
+});
+
+// Sign In Route: Verifies credentials against MongoDB 'users' collection
+// Strict rule: "Account not found. Please Sign Up first." if not found, "Incorrect password." if wrong password
+app.post('/api/auth/signin', async (req: Request, res: Response) => {
+  try {
+    const email = (req.body.email || '').trim().toLowerCase();
+    const password = (req.body.password || '').trim();
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required.' });
+    }
+
+    // 1. HARDCODED ADMIN EXCEPTION: vipadmin@gmail.com / 123 (bypasses standard DB checks)
+    if (email === 'vipadmin@gmail.com' && password === '123') {
+      return res.json({
+        success: true,
+        user: {
+          email: 'vipadmin@gmail.com',
+          role: 'admin',
+          name: 'VIP System Administrator',
+          plan: 'premium',
+        },
+      });
+    }
+
+    // Secondary legacy admin check
+    if (email === 'admin@nibm.lk' && password === 'admin123') {
+      return res.json({
+        success: true,
+        user: {
+          email: 'admin@nibm.lk',
+          role: 'admin',
+          name: 'NIBM Placement Administrator',
+          plan: 'premium',
+        },
+      });
+    }
+
+    // 2. REAL DATABASE VERIFICATION AGAINST 'users' COLLECTION
+    const user = await findUserByEmail(email);
+
+    if (!user) {
+      // Strictly block access if email doesn't exist
+      return res.status(404).json({ error: 'Account not found. Please Sign Up first.' });
+    }
+
+    if (user.password !== password) {
+      // Wrong password
+      return res.status(401).json({ error: 'Incorrect password.' });
+    }
+
+    return res.json({
+      success: true,
+      user: {
+        email: user.email,
+        role: user.role || 'student',
+        name: user.name,
+        plan: user.selectedPlan || 'basic',
+      },
+    });
+  } catch (err: any) {
+    console.error('[Auth API] Signin error:', err);
+    return res.status(500).json({ error: 'Authentication error. Please try again.' });
+  }
+});
+
 async function main() {
+  // Initialize MongoDB connection on server start
+  await connectMongo().catch((e) => console.warn('[MongoDB] Init connection warning:', e));
+
   const isProduction = process.env.NODE_ENV === 'production';
 
   if (!isProduction) {

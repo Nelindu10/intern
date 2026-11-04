@@ -285,7 +285,7 @@ export const PricingModal: React.FC<PricingModalProps> = ({
                   type="text"
                   value={promoCode}
                   onChange={(e) => setPromoCode(e.target.value)}
-                  placeholder="e.g. NIBM-VIP, PRO-ACCESS, BETA-TESTER"
+                  placeholder="Enter Promo Code"
                   className="flex-1 text-xs p-2.5 rounded-xl border border-slate-300 bg-white focus:outline-none focus:border-[#635bff] uppercase font-mono"
                 />
                 <button
@@ -304,7 +304,7 @@ export const PricingModal: React.FC<PricingModalProps> = ({
               )}
               {promoStatus === 'invalid' && (
                 <div className="mt-2 text-xs text-red-600 font-medium">
-                  Invalid code. Try "NIBM-VIP", "PRO-ACCESS", "BETA-TESTER", "VIP-PASS", or "FRIEND-CODE".
+                  Invalid promo code. Please check your code and try again.
                 </div>
               )}
 

@@ -238,7 +238,7 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
         setInlinePromoCode('');
       }, 1500);
     } else {
-      alert('Invalid promo code. Valid beta codes: NIBM-VIP, PRO-ACCESS, BETA-TESTER, VIP-PASS, FRIEND-CODE.');
+      alert('Invalid promo code. Please check your code and try again.');
     }
   };
 
@@ -247,9 +247,9 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
   const [isSearchingCompany, setIsSearchingCompany] = useState(false);
 
   // ---------------------------------------------------------------------------
-  // 5. AUTOMATED MILESTONE PROGRESSION & COMPLETED TASK TRACKING
+  // 5. AUTOMATED MILESTONE PROGRESSION & COMPLETED TASK TRACKING (3-TASK RULE)
   // ---------------------------------------------------------------------------
-  // Stores IDs of tasks completed/passed by the student
+  // Stores IDs of tasks completed/evaluated by the student
   const [completedTaskIds, setCompletedTaskIds] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_COMPLETED_TASKS_KEY);
@@ -263,7 +263,7 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
     return [];
   });
 
-  // Stores milestone progression level per company (Level 1 = Core, Level 2 = Milestone 4 Advanced)
+  // Stores milestone progression level per company (Milestone 3 Core = 1, Milestone 4 Advanced = 4)
   const [companyLevels, setCompanyLevels] = useState<Record<string, number>>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_COMPANY_LEVELS_KEY);
@@ -276,16 +276,20 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
     return {};
   });
 
-  const currentCompanyLevel = companyLevels[selectedCompany.id] || 1;
+  const rawLevel = companyLevels[selectedCompany.id] || 1;
+  const isMilestone4Active = rawLevel >= 4 || rawLevel === 2;
+  const currentCompanyLevel = isMilestone4Active ? 4 : 1;
   const [nextLevelModalOpen, setNextLevelModalOpen] = useState(false);
 
-  // Available tasks: If Level >= 2, unlock Milestone 4 advanced tasks!
+  // Available tasks:
+  // AUTOMATED MILESTONE PROGRESSION:
+  // When Milestone 4 is active, CLEAR the old tasks and show ONLY the 3 advanced tasks!
   const coreTasks = selectedCompany.tasks || [];
   const advancedTasks = selectedCompany.advancedTasks || [];
 
   const availableCompanyTasks: TaskDeliverable[] =
-    currentCompanyLevel >= 2 && advancedTasks.length > 0
-      ? [...coreTasks, ...advancedTasks]
+    isMilestone4Active && advancedTasks.length > 0
+      ? advancedTasks
       : coreTasks.length > 0
       ? coreTasks
       : [currentTask];
@@ -294,11 +298,12 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
     return currentTask?.task_id || availableCompanyTasks[0]?.task_id || 'TASK-STR-101';
   });
 
-  // When selectedCompany changes, sync selectedTaskId to an appropriate task
+  // When selectedCompany or companyLevels change, sync selectedTaskId to the active milestone tasks
   useEffect(() => {
+    const isM4 = (companyLevels[selectedCompany.id] || 1) >= 4 || (companyLevels[selectedCompany.id] || 1) === 2;
     const tasksForComp =
-      (companyLevels[selectedCompany.id] || 1) >= 2 && selectedCompany.advancedTasks && selectedCompany.advancedTasks.length > 0
-        ? [...(selectedCompany.tasks || []), ...selectedCompany.advancedTasks]
+      isM4 && selectedCompany.advancedTasks && selectedCompany.advancedTasks.length > 0
+        ? selectedCompany.advancedTasks
         : selectedCompany.tasks && selectedCompany.tasks.length > 0
         ? selectedCompany.tasks
         : [currentTask];
@@ -325,14 +330,15 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
     }
   };
 
-  // Check if all 3 core tasks are passed
+  // Check if all 3 core tasks are submitted and evaluated
   const coreTaskIds = coreTasks.map((t) => t.task_id);
   const completedCoreCount = coreTaskIds.filter((id) => completedTaskIds.includes(id)).length;
-  const isAllCoreTasksCompleted = coreTaskIds.length > 0 && completedCoreCount >= coreTaskIds.length;
+  const isAllCoreTasksCompleted = coreTaskIds.length >= 3 && completedCoreCount >= coreTaskIds.length;
 
-  // Handler for Proceed to Next Level
-  const handleProceedToNextLevel = () => {
-    const updated = { ...companyLevels, [selectedCompany.id]: 2 };
+  // Handler for "Proceed to Milestone 4"
+  // Upgrades state to Milestone 4, clears old tasks, loads the 3 advanced tasks
+  const handleProceedToMilestone4 = () => {
+    const updated = { ...companyLevels, [selectedCompany.id]: 4 };
     setCompanyLevels(updated);
     try {
       localStorage.setItem(STORAGE_COMPANY_LEVELS_KEY, JSON.stringify(updated));
@@ -345,8 +351,8 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
     // Fire celebration confetti!
     try {
       confetti({
-        particleCount: 110,
-        spread: 90,
+        particleCount: 120,
+        spread: 100,
         origin: { y: 0.6 },
         colors: ['#635bff', '#8b5cf6', '#10b981', '#f59e0b'],
       });
@@ -354,7 +360,7 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
       // ignore
     }
 
-    // Switch selected task to the first newly unlocked Milestone 4 task
+    // Clear old tasks by immediately switching to the 3 new advanced Milestone 4 tasks
     if (selectedCompany.advancedTasks && selectedCompany.advancedTasks.length > 0) {
       const firstAdv = selectedCompany.advancedTasks[0];
       setSelectedTaskId(firstAdv.task_id);
@@ -492,9 +498,10 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
   const handleSelectPreset = async (company: CompanyPreset) => {
     setSelectedCompany(company);
     const compLvl = companyLevels[company.id] || 1;
+    const isM4 = compLvl >= 4 || compLvl === 2;
     const tasksForComp =
-      compLvl >= 2 && company.advancedTasks && company.advancedTasks.length > 0
-        ? [...(company.tasks || []), ...company.advancedTasks]
+      isM4 && company.advancedTasks && company.advancedTasks.length > 0
+        ? company.advancedTasks
         : company.tasks && company.tasks.length > 0
         ? company.tasks
         : [];
@@ -795,11 +802,11 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
       }
 
       // -----------------------------------------------------------------------
-      // 5. AUTOMATED MILESTONE PROGRESSION TRIGGER:
-      // If student passes task (score >= 60), mark it completed.
-      // If all 3 core tasks for the company are completed, trigger "Proceed to Next Level"!
+      // 5. AUTOMATED MILESTONE PROGRESSION TRIGGER (3-TASK RULE):
+      // When student successfully submits all 3 tasks and receives AI evaluation scores,
+      // trigger the "Proceed to Milestone 4" option.
       // -----------------------------------------------------------------------
-      if (evalData.overall_score >= 60) {
+      if (evalData.overall_score > 10) {
         const newlyCompleted = Array.from(new Set([...completedTaskIds, activeSelectedTask.task_id]));
         setCompletedTaskIds(newlyCompleted);
         try {
@@ -809,11 +816,11 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
         }
 
         const compCoreIds = (selectedCompany.tasks || []).map((t) => t.task_id);
-        const allDone = compCoreIds.length > 0 && compCoreIds.every((id) => newlyCompleted.includes(id));
+        const allDone = compCoreIds.length >= 3 && compCoreIds.every((id) => newlyCompleted.includes(id));
         const currentLvl = companyLevels[selectedCompany.id] || 1;
 
-        if (allDone && currentLvl === 1) {
-          // Trigger Proceed to Next Level popup!
+        if (allDone && currentLvl < 4) {
+          // Trigger Proceed to Milestone 4 popup!
           setTimeout(() => {
             setNextLevelModalOpen(true);
           }, 800);
@@ -878,7 +885,7 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
                   type="text"
                   value={inlinePromoCode}
                   onChange={(e) => setInlinePromoCode(e.target.value)}
-                  placeholder="Enter promo code (e.g. NIBM-VIP)"
+                  placeholder="Enter Promo Code"
                   className="flex-1 text-[11px] px-2.5 py-1.5 rounded-lg border border-slate-300 focus:outline-none focus:border-[#635bff] uppercase font-mono bg-slate-50"
                 />
                 <button
@@ -986,11 +993,11 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={handleProceedToNextLevel}
+                  onClick={handleProceedToMilestone4}
                   className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#493ee5] to-[#635bff] hover:from-[#3e34c9] hover:to-[#5248e5] text-white text-xs font-bold shadow-md shadow-[#635bff]/25 transition-all flex items-center gap-2 cursor-pointer"
                 >
                   <Trophy className="w-4 h-4 text-amber-300" />
-                  <span>Proceed to Next Level (Unlock Milestone 4)</span>
+                  <span>Proceed to Milestone 4</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -1230,7 +1237,7 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
         <div className="flex items-center gap-4 text-[11px] font-mono text-slate-600">
           <span className="flex items-center gap-1">
             <Cpu className="w-3.5 h-3.5 text-slate-500" />
-            Milestone Level: {currentCompanyLevel === 2 ? 'Level 2 (Milestone 4)' : 'Level 1 (Core BA)'}
+            Milestone Level: {isMilestone4Active ? 'Milestone 4 (Senior BA Track)' : 'Milestone 3 (Core BA)'}
           </span>
           <span className="flex items-center gap-1 text-emerald-700 font-semibold">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
@@ -1476,7 +1483,7 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
             <div className="flex items-center justify-between text-xs pt-1 border-t border-white/15">
               <span className="text-[11px] text-white/80">Next Handover Sync: 18:00 Local</span>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/20 text-white">
-                {currentCompanyLevel === 2 ? 'Milestone 4 (Senior)' : 'Milestone 3 (Core)'}
+                {isMilestone4Active ? 'Milestone 4 (Senior)' : 'Milestone 3 (Core)'}
               </span>
             </div>
           </div>
@@ -1748,27 +1755,28 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
             </div>
 
             {/* 5. MILESTONE PROGRESSION NOTIFICATION & UNLOCK BANNER */}
-            {isAllCoreTasksCompleted && currentCompanyLevel === 1 && (
+            {isAllCoreTasksCompleted && !isMilestone4Active && (
               <div className="p-3.5 rounded-xl bg-gradient-to-r from-[#ede9fe] to-[#faf8ff] border-2 border-[#635bff]/40 flex flex-wrap items-center justify-between gap-3 shadow-xs animate-in fade-in">
                 <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-[#635bff] text-white flex items-center justify-center shrink-0">
+                  <div className="w-8 h-8 rounded-lg bg-[#635bff] text-white flex items-center justify-center shrink-0 shadow-xs">
                     <Trophy className="w-4 h-4 text-amber-300" />
                   </div>
                   <div>
                     <h4 className="text-xs font-bold text-[#0f172a]">
-                      All 3 Core Tasks Completed for {selectedCompany.name}!
+                      All 3 Core Tasks Completed & Evaluated for {selectedCompany.name}!
                     </h4>
                     <p className="text-[11px] text-slate-600">
-                      You are eligible to advance to Level 2 (Milestone 4: Senior Architecture & BRS).
+                      You are eligible to advance. Click below to upgrade your state to Milestone 4, clear the old tasks, and load the 3 advanced tasks.
                     </p>
                   </div>
                 </div>
                 <button
                   type="button"
-                  onClick={handleProceedToNextLevel}
+                  onClick={handleProceedToMilestone4}
                   className="px-4 py-2 rounded-xl bg-[#635bff] hover:bg-[#5248e5] text-white text-xs font-bold transition-all shadow-md shadow-[#635bff]/25 flex items-center gap-1.5 cursor-pointer shrink-0"
                 >
-                  <span>Proceed to Next Level</span>
+                  <Trophy className="w-3.5 h-3.5 text-amber-300" />
+                  <span>Proceed to Milestone 4</span>
                   <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -1780,16 +1788,16 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
                 <label htmlFor="task-select" className="text-xs font-bold text-[#493ee5] uppercase tracking-wider flex items-center gap-1.5">
                   <Layers className="w-3.5 h-3.5 text-[#635bff]" />
                   <span>
-                    {currentCompanyLevel >= 2 ? 'Milestone 4 (Senior BA Level Active):' : 'Active Milestone / Task Selection:'}
+                    {isMilestone4Active ? 'Milestone 4 (Senior BA Tasks - Old Tasks Cleared):' : 'Active Milestone 3 Tasks:'}
                   </span>
                 </label>
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-semibold text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">
-                    {completedCoreCount}/3 Core Tasks Completed
+                    {completedCoreCount}/3 Core Tasks Evaluated
                   </span>
-                  {currentCompanyLevel >= 2 && (
+                  {isMilestone4Active && (
                     <span className="text-[10px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-200">
-                      Level 2 Active
+                      Milestone 4 Active · 3 Advanced Tasks Loaded
                     </span>
                   )}
                 </div>
@@ -1801,30 +1809,11 @@ export const SimulationWorkspace: React.FC<SimulationWorkspaceProps> = ({
                 onChange={(e) => handleTaskSelectChange(e.target.value)}
                 className="w-full text-xs font-semibold p-2.5 rounded-lg border border-slate-300 bg-white text-slate-800 focus:outline-none focus:border-[#635bff] focus:ring-2 focus:ring-[#635bff]/20 cursor-pointer shadow-xs transition-all"
               >
-                {currentCompanyLevel >= 2 && advancedTasks.length > 0 ? (
-                  <>
-                    <optgroup label="🌟 Milestone 4: Advanced Senior BA Tasks (Active)">
-                      {advancedTasks.map((t) => (
-                        <option key={t.task_id} value={t.task_id}>
-                          {completedTaskIds.includes(t.task_id) ? '✓ ' : ''}[{t.task_id}] {t.task_title}
-                        </option>
-                      ))}
-                    </optgroup>
-                    <optgroup label="✓ Milestone 3: Core BA Tasks (Completed)">
-                      {coreTasks.map((t) => (
-                        <option key={t.task_id} value={t.task_id}>
-                          {completedTaskIds.includes(t.task_id) ? '✓ ' : ''}[{t.task_id}] {t.task_title}
-                        </option>
-                      ))}
-                    </optgroup>
-                  </>
-                ) : (
-                  coreTasks.map((t) => (
-                    <option key={t.task_id} value={t.task_id}>
-                      {completedTaskIds.includes(t.task_id) ? '✓ Passed · ' : ''}[{t.task_id}] {t.task_title}
-                    </option>
-                  ))
-                )}
+                {availableCompanyTasks.map((t) => (
+                  <option key={t.task_id} value={t.task_id}>
+                    {completedTaskIds.includes(t.task_id) ? '✓ Evaluated · ' : ''}[{t.task_id}] {t.task_title}
+                  </option>
+                ))}
               </select>
 
               {/* Selected Task Details Summary Card */}
