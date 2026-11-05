@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI, Type } from '@google/genai';
-import { connectMongo, findUserByEmail, insertUser } from './src/db/mongo';
+import { connectMongo, findUserByEmail, insertUser } from './src/db/mongo.js';
 
 dotenv.config();
 
