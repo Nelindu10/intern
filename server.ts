@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI, Type } from '@google/genai';
-import { connectMongo, findUserByEmail, insertUser } from './src/db/mongo.js';
+import { connectMongo, findUserByEmail, insertUser, hashPassword, verifyPassword } from './src/db/mongo.js';
 
 dotenv.config();
 
@@ -727,7 +727,7 @@ app.get('/api/engine/status', (req: Request, res: Response) => {
 // REAL MONGODB AUTHENTICATION API ROUTES ('users' collection)
 // -------------------------------------------------------------
 
-// Sign Up Route: Accepts email & password, saves to 'users' collection
+// Sign Up Route: Accepts email & password, hashes password, strictly inserts into MongoDB 'users' collection
 app.post('/api/auth/signup', async (req: Request, res: Response) => {
   try {
     const email = (req.body.email || '').trim().toLowerCase();
@@ -747,25 +747,28 @@ app.post('/api/auth/signup', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Password must be at least 3 characters.' });
     }
 
-    // Check if user already exists
+    // Check if user already exists in MongoDB Atlas
     const existing = await findUserByEmail(email);
     if (existing) {
       console.log(`[Auth API - Signup Warning] Email already registered: "${email}"`);
       return res.status(400).json({ error: 'An account with this email already exists. Please Sign In.' });
     }
 
-    // Save user to 'users' collection
+    // Hash password before saving to MongoDB
+    const hashedPassword = hashPassword(password);
     const plan = selectedPlan === 'pro' || selectedPlan === 'premium' ? selectedPlan : 'basic';
+
+    // Strictly insert into MongoDB Atlas 'users' collection
     await insertUser({
       email,
-      password,
+      password: hashedPassword,
       name: name || email.split('@')[0],
       role: 'student',
       selectedPlan: plan,
       createdAt: new Date(),
     });
 
-    console.log(`[Auth API - Signup SUCCESS] Account registered: "${email}"`);
+    console.log(`[Auth API - Signup SUCCESS] Account registered in MongoDB Atlas: "${email}"`);
     return res.json({
       success: true,
       message: 'Account registered successfully! Please Sign In with your credentials.',
@@ -818,7 +821,7 @@ app.post('/api/auth/signin', async (req: Request, res: Response) => {
       });
     }
 
-    // 2. REAL DATABASE VERIFICATION AGAINST 'users' COLLECTION
+    // 2. REAL DATABASE VERIFICATION AGAINST 'users' COLLECTION IN MONGODB ATLAS
     const user = await findUserByEmail(email);
 
     if (!user) {
@@ -827,7 +830,10 @@ app.post('/api/auth/signin', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Account not found. Please Sign Up first.' });
     }
 
-    if (user.password !== password) {
+    // Verify hashed password
+    const isPasswordValid = verifyPassword(password, user.password);
+
+    if (!isPasswordValid) {
       console.log(`[Auth API - Signin Blocked] Password mismatch for: "${email}"`);
       // Wrong password
       return res.status(401).json({ error: 'Incorrect password.' });
