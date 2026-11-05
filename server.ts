@@ -735,17 +735,22 @@ app.post('/api/auth/signup', async (req: Request, res: Response) => {
     const name = (req.body.name || '').trim();
     const selectedPlan = (req.body.selectedPlan || 'basic').trim().toLowerCase();
 
+    console.log(`[Auth API - Signup Request] Email: "${email}", Plan: "${selectedPlan}"`);
+
     if (!email || !password) {
+      console.warn('[Auth API - Signup Warning] Missing email or password.');
       return res.status(400).json({ error: 'Email and password are required.' });
     }
 
     if (password.length < 3) {
+      console.warn('[Auth API - Signup Warning] Password too short.');
       return res.status(400).json({ error: 'Password must be at least 3 characters.' });
     }
 
     // Check if user already exists
     const existing = await findUserByEmail(email);
     if (existing) {
+      console.log(`[Auth API - Signup Warning] Email already registered: "${email}"`);
       return res.status(400).json({ error: 'An account with this email already exists. Please Sign In.' });
     }
 
@@ -760,13 +765,14 @@ app.post('/api/auth/signup', async (req: Request, res: Response) => {
       createdAt: new Date(),
     });
 
+    console.log(`[Auth API - Signup SUCCESS] Account registered: "${email}"`);
     return res.json({
       success: true,
       message: 'Account registered successfully! Please Sign In with your credentials.',
     });
   } catch (err: any) {
-    console.error('[Auth API] Signup error:', err);
-    return res.status(500).json({ error: 'Failed to register account. Please try again.' });
+    console.error('[Auth API - Signup ERROR]:', err?.message || err, err?.stack);
+    return res.status(500).json({ error: err?.message ? `Registration failed: ${err.message}` : 'Failed to register account. Please try again.' });
   }
 });
 
@@ -777,12 +783,16 @@ app.post('/api/auth/signin', async (req: Request, res: Response) => {
     const email = (req.body.email || '').trim().toLowerCase();
     const password = (req.body.password || '').trim();
 
+    console.log(`[Auth API - Signin Request] Email: "${email}"`);
+
     if (!email || !password) {
+      console.warn('[Auth API - Signin Warning] Missing email or password.');
       return res.status(400).json({ error: 'Email and password are required.' });
     }
 
     // 1. HARDCODED ADMIN EXCEPTION: vipadmin@gmail.com / 123 (bypasses standard DB checks)
     if (email === 'vipadmin@gmail.com' && password === '123') {
+      console.log('[Auth API - Signin Admin Bypass] vipadmin@gmail.com authenticated as VIP Admin.');
       return res.json({
         success: true,
         user: {
@@ -796,6 +806,7 @@ app.post('/api/auth/signin', async (req: Request, res: Response) => {
 
     // Secondary legacy admin check
     if (email === 'admin@nibm.lk' && password === 'admin123') {
+      console.log('[Auth API - Signin Admin Bypass] admin@nibm.lk authenticated as Admin.');
       return res.json({
         success: true,
         user: {
@@ -811,15 +822,18 @@ app.post('/api/auth/signin', async (req: Request, res: Response) => {
     const user = await findUserByEmail(email);
 
     if (!user) {
+      console.log(`[Auth API - Signin Blocked] Account not found: "${email}"`);
       // Strictly block access if email doesn't exist
       return res.status(404).json({ error: 'Account not found. Please Sign Up first.' });
     }
 
     if (user.password !== password) {
+      console.log(`[Auth API - Signin Blocked] Password mismatch for: "${email}"`);
       // Wrong password
       return res.status(401).json({ error: 'Incorrect password.' });
     }
 
+    console.log(`[Auth API - Signin SUCCESS] Authenticated user: "${email}"`);
     return res.json({
       success: true,
       user: {
@@ -830,8 +844,8 @@ app.post('/api/auth/signin', async (req: Request, res: Response) => {
       },
     });
   } catch (err: any) {
-    console.error('[Auth API] Signin error:', err);
-    return res.status(500).json({ error: 'Authentication error. Please try again.' });
+    console.error('[Auth API - Signin ERROR]:', err?.message || err, err?.stack);
+    return res.status(500).json({ error: err?.message ? `Authentication failed: ${err.message}` : 'Authentication error. Please try again.' });
   }
 });
 
@@ -872,7 +886,11 @@ async function main() {
   });
 }
 
-main().catch((err) => {
-  console.error('Failed to start server:', err);
-  process.exit(1);
-});
+if (!process.env.VERCEL) {
+  main().catch((err) => {
+    console.error('Failed to start server:', err);
+    process.exit(1);
+  });
+}
+
+export default app;

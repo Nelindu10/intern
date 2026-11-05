@@ -177,10 +177,19 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
           }),
         });
 
-        const data = await response.json();
+        const rawText = await response.text();
+        let data: any = {};
+        try {
+          data = JSON.parse(rawText);
+        } catch (e) {
+          console.error('[Sign Up] Non-JSON server response:', rawText);
+          setErrorMessage(`Server returned non-JSON response (${response.status}): ${rawText.slice(0, 100)}`);
+          setIsSubmitting(false);
+          return;
+        }
 
         if (!response.ok) {
-          setErrorMessage(data.error || 'Failed to create account.');
+          setErrorMessage(data.error || data.message || `Signup failed with status code ${response.status}`);
           setIsSubmitting(false);
           return;
         }
@@ -189,9 +198,9 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
         setSuccessMessage('Account registered successfully! Please Sign In with your credentials.');
         setPassword('');
         setAuthMode('signin');
-      } catch (err) {
-        console.error(err);
-        setErrorMessage('Could not connect to authentication service. Please try again.');
+      } catch (err: any) {
+        console.error('[Sign Up Error]:', err);
+        setErrorMessage(err?.message ? `Sign up error: ${err.message}` : 'Network error connecting to authentication service.');
       } finally {
         setIsSubmitting(false);
       }
@@ -213,10 +222,19 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
         }),
       });
 
-      const data = await response.json();
+      const rawText = await response.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(rawText);
+      } catch (e) {
+        console.error('[Sign In] Non-JSON server response:', rawText);
+        setErrorMessage(`Server returned non-JSON response (${response.status}): ${rawText.slice(0, 100)}`);
+        setIsSubmitting(false);
+        return;
+      }
 
       if (!response.ok) {
-        setErrorMessage(data.error || 'Sign in failed. Please verify your credentials.');
+        setErrorMessage(data.error || data.message || `Sign in failed with status code ${response.status}`);
         setIsSubmitting(false);
         return;
       }
@@ -232,9 +250,9 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
         name: user.name,
         plan: activePlan,
       });
-    } catch (err) {
-      console.error(err);
-      setErrorMessage('Network error during authentication. Please try again.');
+    } catch (err: any) {
+      console.error('[Sign In Error]:', err);
+      setErrorMessage(err?.message ? `Sign in error: ${err.message}` : 'Network error during authentication.');
     } finally {
       setIsSubmitting(false);
     }

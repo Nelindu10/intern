@@ -66,7 +66,7 @@ export async function connectMongo(): Promise<Db | null> {
       await cachedDb.command({ ping: 1 });
       return cachedDb;
     } catch (e) {
-      console.warn('[MongoDB] Cached connection stale, reconnecting...');
+      console.warn('[MongoDB Atlas] Cached connection stale, reconnecting...');
       cachedClient = null;
       cachedDb = null;
     }
@@ -74,6 +74,9 @@ export async function connectMongo(): Promise<Db | null> {
 
   const uri = getMongoUri();
   const dbName = getDbName(uri);
+  const maskedUri = uri.replace(/:([^@]+)@/, ':****@');
+
+  console.log(`[MongoDB Atlas] Attempting connection to database "${dbName}" via URI: ${maskedUri}`);
 
   try {
     const client = new MongoClient(uri, {
@@ -87,10 +90,15 @@ export async function connectMongo(): Promise<Db | null> {
 
     cachedClient = client;
     cachedDb = db;
-    console.log(`[MongoDB] Connected successfully to database: "${dbName}"`);
+    console.log(`[MongoDB Atlas SUCCESS] Connected successfully to database: "${dbName}"`);
     return db;
   } catch (err: any) {
-    console.warn(`[MongoDB] Warning: Could not connect to MongoDB Atlas (${err?.message || err}). Utilizing fallback storage.`);
+    console.error(`[MongoDB Atlas FAILURE] Could not connect to MongoDB (${err?.message || err}). Details:`, {
+      name: err?.name,
+      message: err?.message,
+      code: err?.code,
+    });
+    console.warn('[MongoDB Atlas] Utilizing local fallback storage for continuous availability.');
     return null;
   }
 }
@@ -101,13 +109,19 @@ export async function findUserByEmail(email: string): Promise<UserDoc | null> {
   const db = await connectMongo();
   if (db) {
     try {
+      console.log(`[MongoDB Query] Searching for user email: "${normalized}" in collection "users"`);
       const user = await db.collection<UserDoc>('users').findOne({ email: normalized });
-      if (user) return user;
+      if (user) {
+        console.log(`[MongoDB Query SUCCESS] User found in MongoDB Atlas: "${normalized}"`);
+        return user;
+      }
+      console.log(`[MongoDB Query] User not found in MongoDB Atlas: "${normalized}"`);
     } catch (e: any) {
-      console.warn('[MongoDB] findOne query notice:', e?.message || e);
+      console.error('[MongoDB Query ERROR] findOne failed:', e?.message || e);
     }
   }
 
+  console.log(`[Fallback Store] Checking local storage for email: "${normalized}"`);
   const locals = getLocalUsers();
   return locals.find((u) => u.email.toLowerCase() === normalized) || null;
 }
@@ -122,9 +136,11 @@ export async function insertUser(user: UserDoc): Promise<boolean> {
   const db = await connectMongo();
   if (db) {
     try {
+      console.log(`[MongoDB Insert] Inserting new user: "${normalized.email}" into collection "users"`);
       await db.collection<UserDoc>('users').insertOne(normalized);
+      console.log(`[MongoDB Insert SUCCESS] User inserted into MongoDB Atlas: "${normalized.email}"`);
     } catch (e: any) {
-      console.warn('[MongoDB] insertOne notice:', e?.message || e);
+      console.error('[MongoDB Insert ERROR] insertOne failed:', e?.message || e);
     }
   }
 
@@ -136,5 +152,6 @@ export async function insertUser(user: UserDoc): Promise<boolean> {
     locals.push(normalized);
   }
   saveLocalUsers(locals);
+  console.log(`[Fallback Store] Synced user to local storage: "${normalized.email}"`);
   return true;
 }
