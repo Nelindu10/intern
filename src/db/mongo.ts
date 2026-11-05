@@ -11,15 +11,31 @@ export interface UserDoc {
   createdAt: Date;
 }
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/simulatehub';
-const DB_NAME = process.env.MONGODB_DB_NAME || 'simulatehub';
 const LOCAL_STORE_PATH = path.resolve(process.cwd(), '.data', 'users.json');
 
-let client: MongoClient | null = null;
-let db: Db | null = null;
-let isConnected = false;
+// Global connection state caching across serverless / HMR invocations
+let cachedClient: MongoClient | null = null;
+let cachedDb: Db | null = null;
 
-// Fallback local memory & file store for continuous availability
+function getMongoUri(): string {
+  return process.env.MONGODB_URI || process.env.MONGODB_URL || 'mongodb://127.0.0.1:27017/simulatehub';
+}
+
+function getDbName(uri: string): string {
+  if (process.env.MONGODB_DB_NAME) return process.env.MONGODB_DB_NAME;
+  try {
+    const parsed = new URL(uri);
+    const pathname = parsed.pathname.replace(/^\//, '');
+    if (pathname && !pathname.includes('?')) {
+      return pathname;
+    }
+  } catch (e) {
+    // ignore
+  }
+  return 'simulatehub';
+}
+
+// Fallback local file store for continuous availability
 function getLocalUsers(): UserDoc[] {
   try {
     if (fs.existsSync(LOCAL_STORE_PATH)) {
@@ -45,34 +61,53 @@ function saveLocalUsers(users: UserDoc[]) {
 }
 
 export async function connectMongo(): Promise<Db | null> {
-  if (db && isConnected) return db;
+  if (cachedDb && cachedClient) {
+    try {
+      await cachedDb.command({ ping: 1 });
+      return cachedDb;
+    } catch (e) {
+      console.warn('[MongoDB] Cached connection stale, reconnecting...');
+      cachedClient = null;
+      cachedDb = null;
+    }
+  }
+
+  const uri = getMongoUri();
+  const dbName = getDbName(uri);
+
   try {
-    client = new MongoClient(MONGODB_URI, {
-      serverSelectionTimeoutMS: 2500,
-      connectTimeoutMS: 2500,
+    const client = new MongoClient(uri, {
+      serverSelectionTimeoutMS: 8000,
+      connectTimeoutMS: 10000,
+      maxPoolSize: 10,
     });
     await client.connect();
-    db = client.db(DB_NAME);
-    isConnected = true;
-    console.log(`[MongoDB] Connected to database: ${DB_NAME} at ${MONGODB_URI.split('@').pop()}`);
+    const db = client.db(dbName);
+    await db.command({ ping: 1 });
+
+    cachedClient = client;
+    cachedDb = db;
+    console.log(`[MongoDB] Connected successfully to database: "${dbName}"`);
     return db;
   } catch (err: any) {
-    console.warn(`[MongoDB] Notice: Could not connect to MongoDB URI (${err.message}). Using persistent local fallback storage.`);
-    isConnected = false;
+    console.warn(`[MongoDB] Warning: Could not connect to MongoDB Atlas (${err?.message || err}). Utilizing fallback storage.`);
     return null;
   }
 }
 
 export async function findUserByEmail(email: string): Promise<UserDoc | null> {
   const normalized = email.trim().toLowerCase();
-  if (isConnected && db) {
+
+  const db = await connectMongo();
+  if (db) {
     try {
       const user = await db.collection<UserDoc>('users').findOne({ email: normalized });
       if (user) return user;
-    } catch (e) {
-      console.warn('[MongoDB] Query fallback:', e);
+    } catch (e: any) {
+      console.warn('[MongoDB] findOne query notice:', e?.message || e);
     }
   }
+
   const locals = getLocalUsers();
   return locals.find((u) => u.email.toLowerCase() === normalized) || null;
 }
@@ -84,16 +119,15 @@ export async function insertUser(user: UserDoc): Promise<boolean> {
     createdAt: new Date(),
   };
 
-  // Insert to MongoDB collection 'users'
-  if (isConnected && db) {
+  const db = await connectMongo();
+  if (db) {
     try {
       await db.collection<UserDoc>('users').insertOne(normalized);
-    } catch (e) {
-      console.warn('[MongoDB] insertOne error:', e);
+    } catch (e: any) {
+      console.warn('[MongoDB] insertOne notice:', e?.message || e);
     }
   }
 
-  // Always sync to persistent local file store
   const locals = getLocalUsers();
   const existingIdx = locals.findIndex((u) => u.email.toLowerCase() === normalized.email);
   if (existingIdx >= 0) {

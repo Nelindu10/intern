@@ -835,6 +835,17 @@ app.post('/api/auth/signin', async (req: Request, res: Response) => {
   }
 });
 
+// Auth & Database Connection Health check
+app.get('/api/auth/health', async (req: Request, res: Response) => {
+  const db = await connectMongo();
+  return res.json({
+    status: 'online',
+    databaseConnected: Boolean(db),
+    hasMongoUri: Boolean(process.env.MONGODB_URI || process.env.MONGODB_URL),
+    timestamp: new Date().toISOString(),
+  });
+});
+
 async function main() {
   // Initialize MongoDB connection on server start
   await connectMongo().catch((e) => console.warn('[MongoDB] Init connection warning:', e));
