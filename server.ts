@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI, Type } from '@google/genai';
-import { connectMongo, findUserByEmail, insertUser, hashPassword, verifyPassword } from './src/db/mongo.js';
+import { connectMongo, findUserByEmail, insertUser, hashPassword, verifyPassword, getCleanMongoUri } from './src/db/mongo.js';
 
 dotenv.config();
 
@@ -857,13 +857,24 @@ app.post('/api/auth/signin', async (req: Request, res: Response) => {
 
 // Auth & Database Connection Health check
 app.get('/api/auth/health', async (req: Request, res: Response) => {
-  const db = await connectMongo();
-  return res.json({
-    status: 'online',
-    databaseConnected: Boolean(db),
-    hasMongoUri: Boolean(process.env.MONGODB_URI || process.env.MONGODB_URL),
-    timestamp: new Date().toISOString(),
-  });
+  try {
+    const db = await connectMongo();
+    return res.json({
+      status: 'online',
+      databaseConnected: Boolean(db),
+      hasMongoUri: Boolean(process.env.MONGODB_URI || process.env.MONGODB_URL || process.env.MONGO_URI),
+      cleanUriScheme: getCleanMongoUri().split('://')[0],
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      status: 'error',
+      databaseConnected: false,
+      error: err?.message || 'Connection failed',
+      hasMongoUri: Boolean(process.env.MONGODB_URI || process.env.MONGODB_URL || process.env.MONGO_URI),
+      timestamp: new Date().toISOString(),
+    });
+  }
 });
 
 async function main() {

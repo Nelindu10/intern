@@ -26,8 +26,35 @@ export function verifyPassword(password: string, storedHash: string): boolean {
   return hashedInput === storedHash;
 }
 
-function getMongoUri(): string {
-  return process.env.MONGODB_URI || process.env.MONGODB_URL || 'mongodb://127.0.0.1:27017/simulatehub';
+// Robust URI parser that strips quotes, whitespace, and validates scheme prefixes
+export function getCleanMongoUri(): string {
+  const raw =
+    process.env.MONGODB_URI ||
+    process.env.MONGODB_URL ||
+    process.env.MONGO_URI ||
+    process.env.MONGO_URL ||
+    process.env.DATABASE_URL ||
+    '';
+
+  // Strip leading/trailing double or single quotes, quotes inside env, whitespace, and linebreaks
+  let clean = raw
+    .trim()
+    .replace(/^["']|["']$/g, '')
+    .replace(/\\"/g, '')
+    .trim();
+
+  if (clean.startsWith('mongodb://') || clean.startsWith('mongodb+srv://')) {
+    return clean;
+  }
+
+  // If user provided user:pass@cluster string without scheme prefix, auto-prefix with mongodb+srv://
+  if (clean.includes('@') && (clean.includes('.mongodb.net') || clean.includes('.'))) {
+    const stripped = clean.replace(/^mongodb(\+srv)?:\/\//i, '');
+    return `mongodb+srv://${stripped}`;
+  }
+
+  console.warn('[MongoDB Atlas] Invalid or unconfigured MONGODB_URI. Defaulting to local connection string.');
+  return 'mongodb://127.0.0.1:27017/simulatehub';
 }
 
 function getDbName(uri: string): string {
@@ -56,7 +83,7 @@ export async function connectMongo(): Promise<Db> {
     }
   }
 
-  const uri = getMongoUri();
+  const uri = getCleanMongoUri();
   const dbName = getDbName(uri);
   const maskedUri = uri.replace(/:([^@]+)@/, ':****@');
 
@@ -77,7 +104,7 @@ export async function connectMongo(): Promise<Db> {
     console.log(`[MongoDB Atlas SUCCESS] Connected successfully to database: "${dbName}"`);
     return db;
   } catch (err: any) {
-    console.error(`[MongoDB Atlas FAILURE] Could not connect to MongoDB Atlas:`, err?.message || err);
+    console.error(`[MongoDB Atlas FAILURE] Could not connect to MongoDB Atlas (${err?.message || err}).`);
     throw new Error(`MongoDB connection error: ${err?.message || 'Server selection timeout'}`);
   }
 }
