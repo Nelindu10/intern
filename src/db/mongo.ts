@@ -26,7 +26,66 @@ export function verifyPassword(password: string, storedHash: string): boolean {
   return hashedInput === storedHash;
 }
 
-// Robust URI parser that strips quotes, whitespace, and validates scheme prefixes
+// Encodes special unescaped characters in username & password portions of MongoDB URIs
+export function encodeMongoUriPassword(uri: string): string {
+  if (!uri) return uri;
+
+  let schemePrefix = '';
+  let rest = uri;
+
+  if (uri.startsWith('mongodb+srv://')) {
+    schemePrefix = 'mongodb+srv://';
+    rest = uri.slice('mongodb+srv://'.length);
+  } else if (uri.startsWith('mongodb://')) {
+    schemePrefix = 'mongodb://';
+    rest = uri.slice('mongodb://'.length);
+  } else {
+    return uri;
+  }
+
+  // Find the LAST `@` character in rest before any `/` or `?`
+  const pathOrQueryStart = rest.search(/[\/\?]/);
+  const searchSubstring = pathOrQueryStart !== -1 ? rest.slice(0, pathOrQueryStart) : rest;
+  const lastAtPos = searchSubstring.lastIndexOf('@');
+
+  if (lastAtPos === -1) {
+    // No credentials present in URI
+    return uri;
+  }
+
+  const userInfo = rest.slice(0, lastAtPos);
+  const hostAndParams = rest.slice(lastAtPos + 1);
+
+  // Split userInfo into username and password at the FIRST `:`
+  const firstColonPos = userInfo.indexOf(':');
+  if (firstColonPos === -1) {
+    // Username only, no password
+    return `${schemePrefix}${userInfo}@${hostAndParams}`;
+  }
+
+  const rawUser = userInfo.slice(0, firstColonPos);
+  const rawPassword = userInfo.slice(firstColonPos + 1);
+
+  // Safely decode any existing URL encoding first, then re-encode with encodeURIComponent
+  let safeUser = rawUser;
+  let safePass = rawPassword;
+
+  try {
+    safeUser = encodeURIComponent(decodeURIComponent(rawUser));
+  } catch (e) {
+    safeUser = encodeURIComponent(rawUser);
+  }
+
+  try {
+    safePass = encodeURIComponent(decodeURIComponent(rawPassword));
+  } catch (e) {
+    safePass = encodeURIComponent(rawPassword);
+  }
+
+  return `${schemePrefix}${safeUser}:${safePass}@${hostAndParams}`;
+}
+
+// Robust URI parser that strips quotes, whitespace, formats schemes, and URL-encodes user credentials
 export function getCleanMongoUri(): string {
   const raw =
     process.env.MONGODB_URI ||
@@ -43,18 +102,18 @@ export function getCleanMongoUri(): string {
     .replace(/\\"/g, '')
     .trim();
 
-  if (clean.startsWith('mongodb://') || clean.startsWith('mongodb+srv://')) {
-    return clean;
+  if (!clean.startsWith('mongodb://') && !clean.startsWith('mongodb+srv://')) {
+    if (clean.includes('@') && (clean.includes('.mongodb.net') || clean.includes('.'))) {
+      const stripped = clean.replace(/^mongodb(\+srv)?:\/\//i, '');
+      clean = `mongodb+srv://${stripped}`;
+    } else {
+      console.warn('[MongoDB Atlas] Invalid or unconfigured MONGODB_URI. Defaulting to local connection string.');
+      clean = 'mongodb://127.0.0.1:27017/simulatehub';
+    }
   }
 
-  // If user provided user:pass@cluster string without scheme prefix, auto-prefix with mongodb+srv://
-  if (clean.includes('@') && (clean.includes('.mongodb.net') || clean.includes('.'))) {
-    const stripped = clean.replace(/^mongodb(\+srv)?:\/\//i, '');
-    return `mongodb+srv://${stripped}`;
-  }
-
-  console.warn('[MongoDB Atlas] Invalid or unconfigured MONGODB_URI. Defaulting to local connection string.');
-  return 'mongodb://127.0.0.1:27017/simulatehub';
+  // Automatically URL-encode unescaped special characters in credentials
+  return encodeMongoUriPassword(clean);
 }
 
 function getDbName(uri: string): string {
